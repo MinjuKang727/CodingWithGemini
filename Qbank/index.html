@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>방송대 기출 마스터 v4.1</title>
+    <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getDatabase, ref, get, set, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyCNnZltTeWoOodD7zmonx34RivTz6i8s04",
+        authDomain: "qbank-f4821.firebaseapp.js", // .firebaseapp.com에서 .js로 오타가 날 수 있으니 확인 필수
+        databaseURL: "https://qbank-f4821-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "qbank-f4821",
+        storageBucket: "qbank-f4821.appspot.com",
+        messagingSenderId: "150452150398",
+        appId: "1:150452150398:web:a65a9ddfb8250c2895782f"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+    const provider = new GoogleAuthProvider();
+
+    // 로그인 함수를 window 객체에 직접 할당
+    window.handleLogin = async () => {
+        try {
+            if (window.user) {
+                await auth.signOut();
+                alert("로그아웃 되었습니다.");
+                location.reload();
+            } else {
+                const result = await signInWithPopup(auth, provider);
+                console.log("로그인 성공:", result.user);
+            }
+        } catch (error) {
+            console.error("로그인 에러 상세:", error);
+            // 에러 메시지에 따라 원인 파악 가능
+            if (error.code === 'auth/operation-not-allowed') {
+                alert("에러: Firebase 콘솔에서 Google 로그인을 '사용 설정'하지 않았습니다.");
+            } else if (error.code === 'auth/unauthorized-domain') {
+                alert("에러: 현재 도메인이 Firebase 승인 목록에 없습니다.");
+            } else {
+                alert("로그인 실패: " + error.message);
+            }
+        }
+    };
+
+    onAuthStateChanged(auth, (u) => {
+        window.user = u;
+        document.getElementById('loginBtn').innerText = u ? "로그아웃" : "로그인";
+        document.getElementById('userInfo').innerText = u ? `반갑습니다, ${u.displayName}님` : "로그인이 필요합니다.";
+        // 관리자 확인
+        if(u?.email === "minjukang727@gmail.com") {
+            document.body.classList.add('admin-authorized');
+        }
+    });
+</script>
+    <style>
+        :root { --primary: #4285F4; --bg: #f0f2f5; }
+        body { font-family: 'Malgun Gothic', sans-serif; background: var(--bg); padding: 20px; line-height: 1.6; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header { background: white; padding: 20px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .quiz-card { background: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .category-tag { color: var(--primary); font-size: 0.85em; font-weight: bold; margin-bottom: 10px; display: block; }
+        .question { font-size: 1.1em; font-weight: bold; margin-bottom: 15px; white-space: pre-wrap; }
+        .option { padding: 12px; margin: 8px 0; background: #f8f9fa; border: 2px solid #eee; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .option:hover { background: #eef2ff; border-color: #cbd5e1; }
+        .option.correct { background: #e8f8f0; border-color: #2ecc71; color: #1e7e34; }
+        .option.wrong { background: #fdf2f2; border-color: #e74c3c; color: #b91c1c; }
+        .admin-controls { display: none; margin-top: 15px; background: #fff5f5; padding: 10px; border-radius: 8px; }
+        .admin-authorized .admin-controls { display: block; }
+        button { cursor: pointer; padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; background: white; }
+        .btn-wrong { background: #ff9800; color: white; border: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2>📚 방송대 마스터</h2>
+        <div>
+            <span id="userInfo"></span>
+            <button id="loginBtn" onclick="handleLogin()">로그인</button>
+            <button class="btn-wrong" onclick="toggleWrongOnly()">오답노트</button>
+        </div>
+    </div>
+    <div id="quizDisplay">데이터를 불러오는 중...</div>
+</div>
+
+<script>
+    let rawData = {};
+    let flattenedQuizzes = [];
+    let showWrongOnly = false;
+
+    // 1. 중첩된 JSON을 풀어서(Flatten) 리스트로 변환
+    function flattenData(data) {
+        let list = [];
+        for (let subject in data) {
+            for (let year in data[subject]) {
+                for (let exam in data[subject][year]) {
+                    data[subject][year][exam].forEach((q, idx) => {
+                        list.push({
+                            ...q,
+                            dbPath: `${subject}/${year}/${exam}/${idx}`, // DB 업데이트용 경로
+                            category: `${subject} > ${year} > ${exam}`
+                        });
+                    });
+                }
+            }
+        }
+        return list;
+    }
+
+    async function fetchQuizData() {
+        const snapshot = await window.get(window.ref(window.db, '/'));
+        if (snapshot.exists()) {
+            rawData = snapshot.val();
+            flattenedQuizzes = flattenData(rawData);
+            renderQuizzes();
+        }
+    }
+
+    function renderQuizzes() {
+        const display = document.getElementById('quizDisplay');
+        let targetData = flattenedQuizzes;
+
+        // 오답노트 모드일 때 필터링 (구현 필요 시 추가 로직)
+        if (showWrongOnly) {
+            // 여기에 window.user의 오답 목록과 비교하는 로직 추가 가능
+        }
+
+        display.innerHTML = targetData.map((q, index) => `
+            <div class="quiz-card">
+                <span class="category-tag">${q.category}</span>
+                <div class="question">${q.question}</div>
+                <div class="options" data-correct="${q.answer}">
+                    ${q.options.map((opt, i) => `
+                        <div class="option" onclick="checkAnswer(this, ${i+1}, ${q.answer}, '${q.id}')">
+                            ${i+1}. ${opt}
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="admin-controls">
+                    <button onclick="setAnswer('${q.dbPath}')">정답 설정</button>
+                    <button onclick="editQuestion('${q.dbPath}', \`${q.question}\`)">문제 수정</button>
+                    <small style="color:red">현재 정답: ${q.answer || '미설정'}</small>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function checkAnswer(el, picked, correct, qId) {
+        if (!correct) return alert("관리자가 아직 정답을 설정하지 않은 문제입니다.");
+        const card = el.parentElement;
+        if (card.classList.contains('done')) return;
+
+        if (picked === correct) {
+            el.classList.add('correct');
+        } else {
+            el.classList.add('wrong');
+            card.children[correct-1].classList.add('correct');
+            saveWrongAnswer(qId);
+        }
+        card.classList.add('done');
+    }
+
+    async function saveWrongAnswer(qId) {
+        if (!window.user) return;
+        await window.set(window.ref(window.db, `users/${window.user.uid}/wrong/${qId}`), true);
+    }
+
+    // 관리자 기능: 정답 설정
+    async function setAnswer(path) {
+        const ans = prompt("정답 번호를 입력하세요 (1~4):");
+        if (ans) {
+            await window.update(window.ref(window.db, path), { answer: parseInt(ans) });
+            fetchQuizData();
+        }
+    }
+
+    async function handleLogin() {
+        if (window.user) { await window.auth.signOut(); location.reload(); }
+        else { await window.signInWithPopup(window.auth, new window.GoogleAuthProvider()); }
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# 가상 환경 폴더 무시
+venv/
+venv_PDF2IMG/
+venv_PPC/
+# (선택 사항) 숨김 파일로 생성된 .venv 폴더도 무시
+.venv/
+Qbank/credentials.json
+Qbank/token.pickle
