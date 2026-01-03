@@ -3,38 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QBank - 방송대 기출 문제 은행</title>
+    <title>QBank - 기출 문제 은행</title>
     <style>
-        :root { --primary: #4285F4; --admin: #db4437; }
-        body { font-family: '맑은 고딕', sans-serif; margin: 0; background: #f5f5f5; }
-        header { background: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .container { max-width: 800px; margin: 20px auto; padding: 20px; background: white; border-radius: 8px; }
-        .quiz-card { border-bottom: 1px solid #eee; padding: 15px 0; }
-        .admin-section { display: none; background: #fff3f3; border: 1px solid var(--admin); padding: 15px; margin-bottom: 20px; border-radius: 8px; }
-        .admin-authorized .admin-section { display: block; }
-        button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; }
-        #loginBtn { background: var(--primary); color: white; }
+        body { font-family: '맑은 고딕', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .subject-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .subject-title { color: #1a73e8; font-size: 1.5rem; margin-top: 0; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
+        .year-section { margin-top: 15px; padding-left: 10px; border-left: 3px solid #4285f4; }
+        .quiz-btn { 
+            background: #fff; border: 1px solid #dadce0; padding: 10px 15px; margin: 5px; 
+            border-radius: 20px; cursor: pointer; transition: all 0.2s; font-size: 0.9rem;
+        }
+        .quiz-btn:hover { background: #e8f0fe; border-color: #4285f4; color: #1967d2; }
+        #userInfo { margin-bottom: 20px; text-align: right; font-size: 0.9rem; color: #5f6368; }
+        #loginBtn { background: #1a73e8; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<header>
-    <h2>📚 QBank 기출문제</h2>
-    <div>
-        <span id="userInfo">로그인 해주세요</span>
+<div class="container">
+    <div id="userInfo">
+        <span id="userText">로그인이 필요합니다.</span>
         <button id="loginBtn" onclick="handleLogin()">로그인</button>
     </div>
-</header>
 
-<div class="container">
-    <div class="admin-section">
-        <h4 style="color: var(--admin); margin-top: 0;">⚙️ 관리자 모드 (민주님 전용)</h4>
-        <p>파이썬 프로그램에서 추출한 데이터가 아래 목록에 실시간으로 반영됩니다.</p>
-    </div>
-
-    <div id="quiz-list">
-        <p>데이터를 불러오는 중입니다...</p>
-    </div>
+    <h1>📚 나의 문제 은행</h1>
+    <div id="quiz-list">데이터를 불러오는 중입니다...</div>
 </div>
 
 <script type="module">
@@ -54,7 +48,7 @@
     const db = getDatabase(app);
     const provider = new GoogleAuthProvider();
 
-    // 로그인 시도 (리다이렉트 방식 - 팝업 차단 우회)
+    // 로그인 핸들러
     window.handleLogin = () => {
         if (auth.currentUser) {
             signOut(auth).then(() => location.reload());
@@ -63,50 +57,52 @@
         }
     };
 
-    // 리다이렉트 후 결과 처리
-    getRedirectResult(auth).catch((error) => {
-        if(error.code !== 'auth/none') console.error("인증 에러:", error.message);
-    });
+    getRedirectResult(auth).catch((e) => console.error(e));
 
-    // 데이터 로드 (규칙을 true로 바꿨다면 바로 실행됨)
+    // 핵심: 데이터 불러오기 (최상위 '/' 경로에서 읽기)
     onValue(ref(db, '/'), (snapshot) => {
         const data = snapshot.val();
         const quizListDiv = document.getElementById('quiz-list');
         
         if (!data) {
-            quizListDiv.innerHTML = "<p>등록된 문제가 없습니다.</p>";
+            quizListDiv.innerHTML = "<p>데이터가 없습니다. 파이썬으로 데이터를 먼저 업로드해 주세요.</p>";
             return;
         }
-        
+
         let html = "";
-        // 데이터베이스 최상위의 각 항목(과목명)을 반복합니다.
+        // 최상위의 각 항목(과목명) 순회
         for (let subject in data) {
-            // Firebase가 자동으로 생성하는 메타데이터 등은 제외하고 과목 데이터만 처리
-            if (typeof data[subject] === 'object' && data[subject] !== null) {
-                html += `<div style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:8px; background:#fff;">`;
-                html += `<h3 style="color:#4285F4; margin-top:0;">📘 ${subject}</h3>`;
-                
-                for (let year in data[subject]) {
-                    for (let type in data[subject][year]) {
-                        html += `<button onclick="startQuiz('${subject}', '${year}', '${type}')" 
-                                style="margin:5px; padding:8px 12px; background:#f0f0f0; border:1px solid #ccc; border-radius:4px; cursor:pointer;">
-                                ${year}년 ${type}
-                                </button> `;
-                    }
+            // Firebase 기본 노드 제외 로직
+            if (typeof data[subject] !== 'object') continue;
+
+            html += `<div class="subject-card">`;
+            html += `<h2 class="subject-title">📘 ${subject}</h2>`;
+            
+            for (let year in data[subject]) {
+                html += `<div class="year-section"><strong>📅 ${year}년</strong><br>`;
+                for (let type in data[subject][year]) {
+                    const count = data[subject][year][type].length;
+                    html += `<button class="quiz-btn" onclick="startQuiz('${subject}', '${year}', '${type}')">
+                                ${type} (${count}문제)
+                             </button>`;
                 }
                 html += `</div>`;
             }
+            html += `</div>`;
         }
         quizListDiv.innerHTML = html;
     });
 
+    window.startQuiz = (s, y, t) => {
+        alert(`${s} - ${y}년 ${t} 기출문제를 시작합니다! (기능 구현 중)`);
+    };
+
     onAuthStateChanged(auth, (user) => {
         const btn = document.getElementById('loginBtn');
-        const info = document.getElementById('userInfo');
+        const text = document.getElementById('userText');
         if (user) {
-            info.innerText = user.displayName + "님 반갑습니다. ";
+            text.innerText = `${user.displayName}님 환영합니다! `;
             btn.innerText = "로그아웃";
-            if (user.email === "minjukang727@gmail.com") document.body.classList.add('admin-authorized');
         }
     });
 </script>
