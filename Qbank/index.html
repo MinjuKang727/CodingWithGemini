@@ -10,10 +10,8 @@
         .card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .subject-title { color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
         .quiz-btn { background: #fff; border: 1px solid #dadce0; padding: 10px 15px; margin: 5px; border-radius: 20px; cursor: pointer; transition: 0.2s; }
-        .quiz-btn:hover { background: #e8f0fe; color: #1967d2; }
-        #userInfo { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px; gap: 10px; }
-        /* 로그인/로그아웃 버튼 스타일 고정 */
-        #authBtn { border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; transition: background 0.3s; }
+        #userInfo { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px; gap: 10px; font-weight: bold; }
+        #authBtn { border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; color: white; }
         .btn-login { background: #1a73e8; }
         .btn-logout { background: #5f6368; }
         #quiz-screen { display: none; }
@@ -24,7 +22,7 @@
 
 <div class="container">
     <div id="userInfo">
-        <span id="userText">불러오는 중...</span>
+        <span id="userText">연결 중...</span>
         <button id="authBtn" class="btn-login">로그인</button>
     </div>
 
@@ -34,23 +32,23 @@
     </div>
 
     <div id="quiz-screen" class="card">
-        <button onclick="showMain()">⬅ 목록으로</button>
+        <button id="backBtn">⬅ 목록으로</button>
         <h3 id="quiz-info"></h3>
         <div id="question-container">
             <p id="q-text" style="font-size: 1.1rem; font-weight: bold;"></p>
             <div id="options-container"></div>
         </div>
         <div style="margin-top:20px; display:flex; justify-content: space-between; align-items: center;">
-            <button onclick="prevQuestion()">이전</button>
+            <button id="prevBtn">이전</button>
             <span id="page-num"></span>
-            <button onclick="nextQuestion()">다음</button>
+            <button id="nextBtn">다음</button>
         </div>
     </div>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getAuth, signInWithRedirect, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
@@ -69,83 +67,66 @@
     let currentQuizSet = [];
     let currentIdx = 0;
 
-    const authBtn = document.getElementById('authBtn');
-    const userText = document.getElementById('userText');
+    // 인증 상태 감시 (이것만으로 모든 UI 제어)
+    onAuthStateChanged(auth, (user) => {
+        const authBtn = document.getElementById('authBtn');
+        const userText = document.getElementById('userText');
 
-    // [UI 업데이트 핵심 함수]
-    function updateAuthUI(user) {
         if (user) {
-            userText.innerText = `${user.displayName}님 `;
+            // 로그인 상태
+            userText.innerText = user.displayName + "님 접속 중";
             authBtn.innerText = "로그아웃";
             authBtn.className = "btn-logout";
             authBtn.onclick = () => {
-                signOut(auth).then(() => {
-                    alert("로그아웃 되었습니다.");
-                    window.location.reload();
-                });
+                signOut(auth).then(() => window.location.reload());
             };
         } else {
-            userText.innerText = "로그인 후 이용 가능합니다. ";
+            // 로그아웃 상태
+            userText.innerText = "로그인 후 이용 가능합니다.";
             authBtn.innerText = "로그인";
             authBtn.className = "btn-login";
             authBtn.onclick = () => {
                 signInWithRedirect(auth, provider);
             };
         }
-    }
-
-    // 페이지 로드 시 리다이렉트 결과 처리 및 UI 동기화
-    getRedirectResult(auth)
-        .then((result) => {
-            if (result && result.user) {
-                console.log("로그인 성공!", result.user.displayName);
-                updateAuthUI(result.user);
-            } else if (auth.currentUser) {
-                console.log("이미 로그인된 사용자:", auth.currentUser.displayName);
-                updateAuthUI(auth.currentUser);
-            }
-        })
-        .catch((error) => {
-            console.error("인증 에러 상세:", error.code, error.message);
-            // 여기서 auth/unauthorized-domain 에러가 뜨는지 확인해야 합니다!
-            if (error.code === 'auth/unauthorized-domain') {
-                alert("Firebase 콘솔에 도메인을 등록해야 합니다: " + window.location.hostname);
-            }
-        });
-
-    // 인증 상태 실시간 감시
-    onAuthStateChanged(auth, (user) => {
-        updateAuthUI(user);
     });
 
-    // 데이터 로드
+    // 데이터 불러오기
     onValue(ref(db, '/'), (snapshot) => {
-        allData = snapshot.val();
+        allData = snapshot.val() || {};
         renderList();
     });
 
     function renderList() {
         const listDiv = document.getElementById('quiz-list');
-        if (!allData) return;
         let html = "";
         for (let subject in allData) {
             if (typeof allData[subject] !== 'object') continue;
             html += `<div class="card"><h2 class="subject-title">📘 ${subject}</h2>`;
             for (let year in allData[subject]) {
                 for (let type in allData[subject][year]) {
-                    html += `<button class="quiz-btn" onclick="startQuiz('${subject}', '${year}', '${type}')">
+                    // onclick 대신 data 속성 활용 (보안 및 정확성)
+                    html += `<button class="quiz-btn" data-s="${subject}" data-y="${year}" data-t="${type}">
                                 ${year}년 ${type}
                              </button>`;
                 }
             }
             html += `</div>`;
         }
-        listDiv.innerHTML = html;
+        listDiv.innerHTML = html || "등록된 문제가 없습니다.";
+
+        // 버튼 클릭 이벤트 리스너 등록
+        document.querySelectorAll('.quiz-btn').forEach(btn => {
+            btn.onclick = () => {
+                const { s, y, t } = btn.dataset;
+                startQuiz(s, y, t);
+            };
+        });
     }
 
-    window.startQuiz = (s, y, t) => {
+    function startQuiz(s, y, t) {
         if (!auth.currentUser) {
-            alert("로그인이 필요한 서비스입니다.");
+            alert("로그인해야 문제를 풀 수 있습니다.");
             return;
         }
         currentQuizSet = allData[s][y][t];
@@ -154,7 +135,7 @@
         document.getElementById('quiz-screen').style.display = 'block';
         document.getElementById('quiz-info').innerText = `${s} (${y}년 ${t})`;
         displayQuestion();
-    };
+    }
 
     function displayQuestion() {
         const q = currentQuizSet[currentIdx];
@@ -168,14 +149,15 @@
             const btn = document.createElement('button');
             btn.className = 'option-btn';
             btn.innerText = `${i + 1}) ${opt}`;
-            btn.onclick = () => alert(`답: ${i + 1}번 선택`);
+            btn.onclick = () => alert("정답 체크는 준비 중입니다.");
             optContainer.appendChild(btn);
         });
     }
 
-    window.nextQuestion = () => { if (currentIdx < currentQuizSet.length - 1) { currentIdx++; displayQuestion(); } };
-    window.prevQuestion = () => { if (currentIdx > 0) { currentIdx--; displayQuestion(); } };
-    window.showMain = () => {
+    // 네비게이션 버튼 이벤트
+    document.getElementById('nextBtn').onclick = () => { if (currentIdx < currentQuizSet.length - 1) { currentIdx++; displayQuestion(); } };
+    document.getElementById('prevBtn').onclick = () => { if (currentIdx > 0) { currentIdx--; displayQuestion(); } };
+    document.getElementById('backBtn').onclick = () => {
         document.getElementById('main-screen').style.display = 'block';
         document.getElementById('quiz-screen').style.display = 'none';
     };
