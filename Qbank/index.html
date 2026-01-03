@@ -39,7 +39,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
@@ -54,51 +54,49 @@
     const db = getDatabase(app);
     const provider = new GoogleAuthProvider();
 
-    // 1. 로그인 로직
-    window.handleLogin = async () => {
+    // 로그인 시도 (리다이렉트 방식 - 팝업 차단 우회)
+    window.handleLogin = () => {
         if (auth.currentUser) {
-            await signOut(auth);
-            location.reload();
+            signOut(auth).then(() => location.reload());
         } else {
-            try {
-                await signInWithPopup(auth, provider);
-            } catch (e) { alert("로그인 실패: " + e.message); }
+            signInWithRedirect(auth, provider);
         }
     };
 
-    // 2. 데이터 실시간 로드
-    const quizListDiv = document.getElementById('quiz-list');
+    // 리다이렉트 후 결과 처리
+    getRedirectResult(auth).catch((error) => {
+        if(error.code !== 'auth/none') console.error("인증 에러:", error.message);
+    });
+
+    // 데이터 로드 (규칙을 true로 바꿨다면 바로 실행됨)
     onValue(ref(db, 'quizzes'), (snapshot) => {
         const data = snapshot.val();
+        const quizListDiv = document.getElementById('quiz-list');
         if (!data) {
-            quizListDiv.innerHTML = "<p>등록된 문제가 없습니다. 파이썬 도구로 추출해 보세요!</p>";
+            quizListDiv.innerHTML = "<p>데이터가 없습니다. 파이썬에서 업로드해주세요.</p>";
             return;
         }
         
-        // 데이터 화면 출력 (과목별 반복)
         let html = "";
         for (let subject in data) {
-            html += `<h3>📘 ${subject}</h3>`;
+            html += `<div style="border:1px solid #ccc; padding:10px; margin:10px;"><h3>📘 ${subject}</h3>`;
             for (let year in data[subject]) {
                 for (let type in data[subject][year]) {
-                    const questions = data[subject][year][type];
-                    html += `<p><strong>${year}년 ${type}</strong> (${questions.length}문제)</p>`;
+                    html += `<button onclick="alert('${year}년 ${type} 문제를 시작합니다!')">${year}년 ${type}</button> `;
                 }
             }
+            html += `</div>`;
         }
         quizListDiv.innerHTML = html;
     });
 
-    // 3. 권한 체크
     onAuthStateChanged(auth, (user) => {
         const btn = document.getElementById('loginBtn');
         const info = document.getElementById('userInfo');
         if (user) {
-            info.innerText = user.displayName + "님 ";
+            info.innerText = user.displayName + "님 반갑습니다. ";
             btn.innerText = "로그아웃";
-            if (user.email === "minjukang727@gmail.com") {
-                document.body.classList.add('admin-authorized');
-            }
+            if (user.email === "minjukang727@gmail.com") document.body.classList.add('admin-authorized');
         }
     });
 </script>
