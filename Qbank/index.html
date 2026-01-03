@@ -95,9 +95,23 @@
     }
 
     // 페이지 로드 시 리다이렉트 결과 처리 및 UI 동기화
-    getRedirectResult(auth).then(() => {
-        updateAuthUI(auth.currentUser);
-    }).catch((error) => console.error(error));
+    getRedirectResult(auth)
+        .then((result) => {
+            if (result && result.user) {
+                console.log("로그인 성공!", result.user.displayName);
+                updateAuthUI(result.user);
+            } else if (auth.currentUser) {
+                console.log("이미 로그인된 사용자:", auth.currentUser.displayName);
+                updateAuthUI(auth.currentUser);
+            }
+        })
+        .catch((error) => {
+            console.error("인증 에러 상세:", error.code, error.message);
+            // 여기서 auth/unauthorized-domain 에러가 뜨는지 확인해야 합니다!
+            if (error.code === 'auth/unauthorized-domain') {
+                alert("Firebase 콘솔에 도메인을 등록해야 합니다: " + window.location.hostname);
+            }
+        });
 
     // 인증 상태 실시간 감시
     onAuthStateChanged(auth, (user) => {
