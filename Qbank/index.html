@@ -5,35 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QBank - 기출 문제 은행</title>
     <style>
-        body { font-family: '맑은 고딕', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: 0 auto; }
-        .subject-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .subject-title { color: #1a73e8; font-size: 1.5rem; margin-top: 0; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
-        .year-section { margin-top: 15px; padding-left: 10px; border-left: 3px solid #4285f4; }
+        body { font-family: '맑은 고딕', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; line-height: 1.6; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .subject-title { color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
         .quiz-btn { 
             background: #fff; border: 1px solid #dadce0; padding: 10px 15px; margin: 5px; 
-            border-radius: 20px; cursor: pointer; transition: all 0.2s; font-size: 0.9rem;
+            border-radius: 20px; cursor: pointer; transition: 0.2s;
         }
-        .quiz-btn:hover { background: #e8f0fe; border-color: #4285f4; color: #1967d2; }
-        #userInfo { margin-bottom: 20px; text-align: right; font-size: 0.9rem; color: #5f6368; }
-        #loginBtn { background: #1a73e8; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .quiz-btn:hover { background: #e8f0fe; color: #1967d2; }
+        
+        /* 퀴즈 화면 스타일 */
+        #quiz-screen { display: none; }
+        .option-btn { 
+            display: block; width: 100%; text-align: left; padding: 12px; margin: 8px 0;
+            border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer;
+        }
+        .option-btn:hover { background: #f8f9fa; }
+        .nav-btns { display: flex; justify-content: space-between; margin-top: 20px; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="userInfo">
-        <span id="userText">로그인이 필요합니다.</span>
-        <button id="loginBtn" onclick="handleLogin()">로그인</button>
+    <div id="main-screen">
+        <div id="userInfo" style="text-align: right; margin-bottom: 10px;">
+            <button id="loginBtn" onclick="handleLogin()">로그인</button>
+        </div>
+        <h1>📚 나의 문제 은행</h1>
+        <div id="quiz-list">데이터를 불러오는 중입니다...</div>
     </div>
 
-    <h1>📚 나의 문제 은행</h1>
-    <div id="quiz-list">데이터를 불러오는 중입니다...</div>
+    <div id="quiz-screen" class="card">
+        <button onclick="showMain()" style="margin-bottom: 20px;">⬅ 목록으로</button>
+        <h3 id="quiz-info">과목명 - 연도</h3>
+        <hr>
+        <div id="question-container">
+            <p id="q-text" style="font-size: 1.1rem; font-weight: bold;"></p>
+            <div id="options-container"></div>
+        </div>
+        <div class="nav-btns">
+            <button onclick="prevQuestion()">이전</button>
+            <span id="page-num">1 / 25</span>
+            <button onclick="nextQuestion()">다음</button>
+        </div>
+    </div>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getAuth, signInWithRedirect, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
@@ -48,63 +70,89 @@
     const db = getDatabase(app);
     const provider = new GoogleAuthProvider();
 
-    // 로그인 핸들러
-    window.handleLogin = () => {
-        if (auth.currentUser) {
-            signOut(auth).then(() => location.reload());
-        } else {
-            signInWithRedirect(auth, provider);
-        }
-    };
+    let allData = {};
+    let currentQuizSet = [];
+    let currentIdx = 0;
 
-    getRedirectResult(auth).catch((e) => console.error(e));
-
-    // 핵심: 데이터 불러오기 (최상위 '/' 경로에서 읽기)
+    // 1. 데이터 불러오기
     onValue(ref(db, '/'), (snapshot) => {
-        const data = snapshot.val();
-        const quizListDiv = document.getElementById('quiz-list');
+        allData = snapshot.val();
+        renderList();
+    });
+
+    function renderList() {
+        const listDiv = document.getElementById('quiz-list');
+        if (!allData) return;
         
-        if (!data) {
-            quizListDiv.innerHTML = "<p>데이터가 없습니다. 파이썬으로 데이터를 먼저 업로드해 주세요.</p>";
-            return;
-        }
-
         let html = "";
-        // 최상위의 각 항목(과목명) 순회
-        for (let subject in data) {
-            // Firebase 기본 노드 제외 로직
-            if (typeof data[subject] !== 'object') continue;
-
-            html += `<div class="subject-card">`;
-            html += `<h2 class="subject-title">📘 ${subject}</h2>`;
-            
-            for (let year in data[subject]) {
-                html += `<div class="year-section"><strong>📅 ${year}년</strong><br>`;
-                for (let type in data[subject][year]) {
-                    const count = data[subject][year][type].length;
+        for (let subject in allData) {
+            if (typeof allData[subject] !== 'object') continue;
+            html += `<div class="card"><h2 class="subject-title">📘 ${subject}</h2>`;
+            for (let year in allData[subject]) {
+                for (let type in allData[subject][year]) {
                     html += `<button class="quiz-btn" onclick="startQuiz('${subject}', '${year}', '${type}')">
-                                ${type} (${count}문제)
+                                ${year}년 ${type}
                              </button>`;
                 }
-                html += `</div>`;
             }
             html += `</div>`;
         }
-        quizListDiv.innerHTML = html;
-    });
+        listDiv.innerHTML = html;
+    }
 
+    // 2. 퀴즈 시작 함수
     window.startQuiz = (s, y, t) => {
-        alert(`${s} - ${y}년 ${t} 기출문제를 시작합니다! (기능 구현 중)`);
+        currentQuizSet = allData[s][y][t];
+        currentIdx = 0;
+        
+        document.getElementById('main-screen').style.display = 'none';
+        document.getElementById('quiz-screen').style.display = 'block';
+        document.getElementById('quiz-info').innerText = `${s} (${y}년 ${t})`;
+        
+        displayQuestion();
     };
 
-    onAuthStateChanged(auth, (user) => {
-        const btn = document.getElementById('loginBtn');
-        const text = document.getElementById('userText');
-        if (user) {
-            text.innerText = `${user.displayName}님 환영합니다! `;
-            btn.innerText = "로그아웃";
+    // 3. 문제 표시 함수
+    function displayQuestion() {
+        const q = currentQuizSet[currentIdx];
+        document.getElementById('q-text').innerText = `${currentIdx + 1}. ${q.question}`;
+        document.getElementById('page-num').innerText = `${currentIdx + 1} / ${currentQuizSet.length}`;
+        
+        const optContainer = document.getElementById('options-container');
+        optContainer.innerHTML = "";
+        
+        q.options.forEach((opt, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = `${i + 1}) ${opt}`;
+            btn.onclick = () => alert(`선택하신 답: ${i + 1}번\n(정답 체크 기능은 구현 예정입니다.)`);
+            optContainer.appendChild(btn);
+        });
+    }
+
+    // 4. 네비게이션 함수
+    window.nextQuestion = () => {
+        if (currentIdx < currentQuizSet.length - 1) {
+            currentIdx++;
+            displayQuestion();
         }
-    });
+    };
+    window.prevQuestion = () => {
+        if (currentIdx > 0) {
+            currentIdx--;
+            displayQuestion();
+        }
+    };
+    window.showMain = () => {
+        document.getElementById('main-screen').style.display = 'block';
+        document.getElementById('quiz-screen').style.display = 'none';
+    };
+
+    // 로그인/로그아웃 (Redirect 방식)
+    window.handleLogin = () => {
+        if (auth.currentUser) signOut(auth).then(() => location.reload());
+        else signInWithRedirect(auth, provider);
+    };
 </script>
 </body>
 </html>
