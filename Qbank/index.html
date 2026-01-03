@@ -69,23 +69,33 @@
     });
 
     // 데이터 로드 (규칙을 true로 바꿨다면 바로 실행됨)
-    onValue(ref(db, 'quizzes'), (snapshot) => {
+    onValue(ref(db, '/'), (snapshot) => {
         const data = snapshot.val();
         const quizListDiv = document.getElementById('quiz-list');
+        
         if (!data) {
-            quizListDiv.innerHTML = "<p>데이터가 없습니다. 파이썬에서 업로드해주세요.</p>";
+            quizListDiv.innerHTML = "<p>등록된 문제가 없습니다.</p>";
             return;
         }
         
         let html = "";
+        // 데이터베이스 최상위의 각 항목(과목명)을 반복합니다.
         for (let subject in data) {
-            html += `<div style="border:1px solid #ccc; padding:10px; margin:10px;"><h3>📘 ${subject}</h3>`;
-            for (let year in data[subject]) {
-                for (let type in data[subject][year]) {
-                    html += `<button onclick="alert('${year}년 ${type} 문제를 시작합니다!')">${year}년 ${type}</button> `;
+            // Firebase가 자동으로 생성하는 메타데이터 등은 제외하고 과목 데이터만 처리
+            if (typeof data[subject] === 'object' && data[subject] !== null) {
+                html += `<div style="border:1px solid #ddd; padding:15px; margin-bottom:15px; border-radius:8px; background:#fff;">`;
+                html += `<h3 style="color:#4285F4; margin-top:0;">📘 ${subject}</h3>`;
+                
+                for (let year in data[subject]) {
+                    for (let type in data[subject][year]) {
+                        html += `<button onclick="startQuiz('${subject}', '${year}', '${type}')" 
+                                style="margin:5px; padding:8px 12px; background:#f0f0f0; border:1px solid #ccc; border-radius:4px; cursor:pointer;">
+                                ${year}년 ${type}
+                                </button> `;
+                    }
                 }
+                html += `</div>`;
             }
-            html += `</div>`;
         }
         quizListDiv.innerHTML = html;
     });
