@@ -9,7 +9,7 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, Toplevel, Label, Button, Canvas, Scrollbar, ttk
 from PIL import Image, ImageTk
-
+import requests # Firebase API 통신용
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -252,12 +252,12 @@ class GoogleQuizExtractor:
         return quiz_list
 
     def merge_quiz_data(self, s, y, t, q):
+        # 1. 로컬 JSON 저장 (기존 기능)
         db_path = 'quiz_db.json'
         db = {}
         if os.path.exists(db_path):
             try:
-                with open(db_path, 'r', encoding='utf-8') as f:
-                    db = json.load(f)
+                with open(db_path, 'r', encoding='utf-8') as f: db = json.load(f)
             except: db = {}
             
         if s not in db: db[s] = {}
@@ -266,6 +266,18 @@ class GoogleQuizExtractor:
         
         with open(db_path, 'w', encoding='utf-8') as f:
             json.dump(db, f, ensure_ascii=False, indent=4)
+
+        # 2. Firebase 실시간 데이터베이스로 업로드 (추가된 부분)
+        # 본인의 Firebase Database URL로 변경하세요.
+        firebase_url = "https://qbank-f4821-default-rtdb.asia-southeast1.firebasedatabase.app/quizzes.json"
+        try:
+            response = requests.put(firebase_url, json=db)
+            if response.status_code == 200:
+                self.log("🚀 Firebase 데이터베이스 동기화 완료!")
+            else:
+                self.log(f"❌ Firebase 업로드 실패: {response.status_code}")
+        except Exception as e:
+            self.log(f"❌ Firebase 연결 오류: {e}")
 
     def cleanup(self, l):
         self.current_photo = None
