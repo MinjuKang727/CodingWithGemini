@@ -3,42 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QBank - 기출 문제 은행</title>
+    <title>QBank - 자유로운 문제 풀이</title>
     <style>
         body { font-family: '맑은 고딕', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
         .container { max-width: 800px; margin: 0 auto; }
         .card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .subject-title { color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
         .quiz-btn { background: #fff; border: 1px solid #dadce0; padding: 10px 15px; margin: 5px; border-radius: 20px; cursor: pointer; transition: 0.2s; }
-        #userInfo { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px; gap: 10px; font-weight: bold; }
-        #authBtn { border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; color: white; min-width: 100px; }
-        .btn-login { background: #1a73e8; }
-        .btn-logout { background: #5f6368; }
+        .quiz-btn:hover { background: #e8f0fe; color: #1967d2; }
         #quiz-screen { display: none; }
-        .option-btn { display: block; width: 100%; text-align: left; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; }
+        .option-btn { display: block; width: 100%; text-align: left; padding: 15px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; font-size: 1rem; }
+        .option-btn:hover { background: #f8f9fa; }
+        .wrong-badge { color: #d93025; font-size: 0.8rem; margin-left: 10px; font-weight: bold; }
+        .nav-btns { margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
+        button { cursor: pointer; padding: 10px 20px; border-radius: 6px; border: 1px solid #ccc; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="userInfo">
-        <span id="userText">인증 확인 중...</span>
-        <button id="authBtn" class="btn-login">로그인</button>
-    </div>
-
     <div id="main-screen">
-        <h1>📚 나의 문제 은행</h1>
-        <div id="quiz-list">데이터를 불러오는 중입니다...</div>
+        <h1>📚 기출 문제 은행</h1>
+        <p>로그인 없이 바로 학습을 시작하세요!</p>
+        <div id="quiz-list">데이터를 불러오는 중...</div>
     </div>
 
     <div id="quiz-screen" class="card">
         <button id="backBtn">⬅ 목록으로</button>
         <h3 id="quiz-info"></h3>
+        <hr>
         <div id="question-container">
-            <p id="q-text" style="font-size: 1.1rem; font-weight: bold;"></p>
+            <p id="q-text" style="font-size: 1.2rem; font-weight: bold; min-height: 60px;"></p>
             <div id="options-container"></div>
         </div>
-        <div style="margin-top:20px; display:flex; justify-content: space-between; align-items: center;">
+        <div class="nav-btns">
             <button id="prevBtn">이전</button>
             <span id="page-num"></span>
             <button id="nextBtn">다음</button>
@@ -48,7 +46,6 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
@@ -59,57 +56,14 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
     const db = getDatabase(app);
-    const provider = new GoogleAuthProvider();
-
-    // 1. 세션 유지 설정 (새로고침해도 로그인 안 풀리게)
-    setPersistence(auth, browserLocalPersistence);
 
     let allData = {};
     let currentQuizSet = [];
     let currentIdx = 0;
+    let currentQuizId = ""; // 오답 기록용 ID
 
-    const authBtn = document.getElementById('authBtn');
-    const userText = document.getElementById('userText');
-
-    // 2. 로그인 상태 업데이트 함수
-    function updateUI(user) {
-        if (user) {
-            userText.innerText = user.displayName + "님 환영합니다!";
-            authBtn.innerText = "로그아웃";
-            authBtn.className = "btn-logout";
-            authBtn.onclick = () => {
-                signOut(auth).then(() => {
-                    alert("로그아웃 되었습니다.");
-                    location.reload();
-                });
-            };
-        } else {
-            userText.innerText = "로그인 후 이용 가능합니다.";
-            authBtn.innerText = "로그인";
-            authBtn.className = "btn-login";
-            authBtn.onclick = () => {
-                signInWithRedirect(auth, provider);
-            };
-        }
-    }
-
-    // 3. 리다이렉트 후 결과 처리 (이게 핵심!)
-    getRedirectResult(auth).then((result) => {
-        if (result?.user) {
-            updateUI(result.user);
-        }
-    }).catch((error) => {
-        console.error("인증 에러:", error.message);
-    });
-
-    // 4. 실시간 인증 상태 감시
-    onAuthStateChanged(auth, (user) => {
-        updateUI(user);
-    });
-
-    // 5. 데이터 불러오기 및 렌더링
+    // 1. 데이터 로드 (로그인 체크 없이 즉시 실행)
     onValue(ref(db, '/'), (snapshot) => {
         allData = snapshot.val() || {};
         renderList();
@@ -118,30 +72,33 @@
     function renderList() {
         const listDiv = document.getElementById('quiz-list');
         let html = "";
+        
+        // 로컬스토리지에서 오답 기록 가져오기
+        const wrongAnswers = JSON.parse(localStorage.getItem('wrong_quizzes') || "{}");
+
         for (let subject in allData) {
             if (typeof allData[subject] !== 'object') continue;
             html += `<div class="card"><h2 class="subject-title">📘 ${subject}</h2>`;
             for (let year in allData[subject]) {
                 for (let type in allData[subject][year]) {
+                    const id = `${subject}_${year}_${type}`;
+                    const wrongCount = wrongAnswers[id] ? ` <span class="wrong-badge">❌ 오답 있음</span>` : "";
                     html += `<button class="quiz-btn" data-s="${subject}" data-y="${year}" data-t="${type}">
-                                ${year}년 ${type}
+                                ${year}년 ${type}${wrongCount}
                              </button>`;
                 }
             }
             html += `</div>`;
         }
         listDiv.innerHTML = html || "데이터가 없습니다.";
-        
+
         document.querySelectorAll('.quiz-btn').forEach(btn => {
             btn.onclick = () => startQuiz(btn.dataset.s, btn.dataset.y, btn.dataset.t);
         });
     }
 
     function startQuiz(s, y, t) {
-        if (!auth.currentUser) {
-            alert("로그인해야 문제를 풀 수 있습니다.");
-            return;
-        }
+        currentQuizId = `${s}_${y}_${t}`;
         currentQuizSet = allData[s][y][t];
         currentIdx = 0;
         document.getElementById('main-screen').style.display = 'none';
@@ -154,16 +111,32 @@
         const q = currentQuizSet[currentIdx];
         document.getElementById('q-text').innerText = `${currentIdx + 1}. ${q.question}`;
         document.getElementById('page-num').innerText = `${currentIdx + 1} / ${currentQuizSet.length}`;
+        
         const optContainer = document.getElementById('options-container');
         optContainer.innerHTML = "";
+        
         const options = Array.isArray(q.options) ? q.options : Object.values(q.options || {});
         options.forEach((opt, i) => {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
             btn.innerText = `${i + 1}) ${opt}`;
-            btn.onclick = () => alert("정답 체크는 준비 중입니다.");
+            btn.onclick = () => checkAnswer(i + 1, q.answer);
             optContainer.appendChild(btn);
         });
+    }
+
+    // 2. 정답 체크 및 오답 관리 (localStorage 활용)
+    function checkAnswer(selected, correct) {
+        if (String(selected) === String(correct)) {
+            alert("✅ 정답입니다!");
+        } else {
+            alert(`❌ 틀렸습니다! 정답은 ${correct}번입니다.`);
+            
+            // 오답 기록 저장
+            let wrongAnswers = JSON.parse(localStorage.getItem('wrong_quizzes') || "{}");
+            wrongAnswers[currentQuizId] = true;
+            localStorage.setItem('wrong_quizzes', JSON.stringify(wrongAnswers));
+        }
     }
 
     document.getElementById('nextBtn').onclick = () => { if (currentIdx < currentQuizSet.length - 1) { currentIdx++; displayQuestion(); } };
@@ -171,6 +144,7 @@
     document.getElementById('backBtn').onclick = () => {
         document.getElementById('main-screen').style.display = 'block';
         document.getElementById('quiz-screen').style.display = 'none';
+        renderList(); // 목록으로 갈 때 오답 배지 갱신
     };
 </script>
 </body>
