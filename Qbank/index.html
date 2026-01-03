@@ -9,13 +9,13 @@
         .container { max-width: 800px; margin: 0 auto; }
         .card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .subject-title { color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
-        .quiz-btn { 
-            background: #fff; border: 1px solid #dadce0; padding: 10px 15px; margin: 5px; 
-            border-radius: 20px; cursor: pointer; transition: 0.2s;
-        }
+        .quiz-btn { background: #fff; border: 1px solid #dadce0; padding: 10px 15px; margin: 5px; border-radius: 20px; cursor: pointer; transition: 0.2s; }
         .quiz-btn:hover { background: #e8f0fe; color: #1967d2; }
-        #userInfo { text-align: right; margin-bottom: 20px; padding: 10px; background: #fff; border-radius: 8px; }
-        #loginBtn { background: #1a73e8; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        #userInfo { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px; gap: 10px; }
+        /* 로그인/로그아웃 버튼 스타일 고정 */
+        #authBtn { border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; transition: background 0.3s; }
+        .btn-login { background: #1a73e8; }
+        .btn-logout { background: #5f6368; }
         #quiz-screen { display: none; }
         .option-btn { display: block; width: 100%; text-align: left; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; }
     </style>
@@ -24,8 +24,8 @@
 
 <div class="container">
     <div id="userInfo">
-        <span id="userText">로그인 후 이용 가능합니다. </span>
-        <button id="loginBtn">로그인</button>
+        <span id="userText">불러오는 중...</span>
+        <button id="authBtn" class="btn-login">로그인</button>
     </div>
 
     <div id="main-screen">
@@ -69,47 +69,50 @@
     let currentQuizSet = [];
     let currentIdx = 0;
 
-    // [버튼 텍스트 변경 및 로그인 로직]
-    const loginBtn = document.getElementById('loginBtn');
+    const authBtn = document.getElementById('authBtn');
     const userText = document.getElementById('userText');
 
-    loginBtn.onclick = () => {
-        if (auth.currentUser) {
-            signOut(auth).then(() => {
-                alert("로그아웃 되었습니다.");
-                location.reload();
-            });
-        } else {
-            signInWithRedirect(auth, provider);
-        }
-    };
-
-    // 인증 상태 감시 (로그인 여부에 따라 UI 변경)
-    onAuthStateChanged(auth, (user) => {
+    // [UI 업데이트 핵심 함수]
+    function updateAuthUI(user) {
         if (user) {
-            userText.innerText = `${user.displayName}님 접속 중 `;
-            loginBtn.innerText = "로그아웃";
-            loginBtn.style.background = "#5f6368";
+            userText.innerText = `${user.displayName}님 `;
+            authBtn.innerText = "로그아웃";
+            authBtn.className = "btn-logout";
+            authBtn.onclick = () => {
+                signOut(auth).then(() => {
+                    alert("로그아웃 되었습니다.");
+                    window.location.reload();
+                });
+            };
         } else {
             userText.innerText = "로그인 후 이용 가능합니다. ";
-            loginBtn.innerText = "로그인";
-            loginBtn.style.background = "#1a73e8";
+            authBtn.innerText = "로그인";
+            authBtn.className = "btn-login";
+            authBtn.onclick = () => {
+                signInWithRedirect(auth, provider);
+            };
         }
+    }
+
+    // 페이지 로드 시 리다이렉트 결과 처리 및 UI 동기화
+    getRedirectResult(auth).then(() => {
+        updateAuthUI(auth.currentUser);
+    }).catch((error) => console.error(error));
+
+    // 인증 상태 실시간 감시
+    onAuthStateChanged(auth, (user) => {
+        updateAuthUI(user);
     });
 
-    // 데이터 로드 (로그인 안 해도 일단 목록은 읽어오도록 설정)
+    // 데이터 로드
     onValue(ref(db, '/'), (snapshot) => {
         allData = snapshot.val();
         renderList();
-    }, (error) => {
-        console.error("데이터 읽기 실패 (권한 문제일 수 있음):", error);
-        document.getElementById('quiz-list').innerHTML = "데이터를 읽을 권한이 없습니다. 로그인을 먼저 해주세요.";
     });
 
     function renderList() {
         const listDiv = document.getElementById('quiz-list');
         if (!allData) return;
-        
         let html = "";
         for (let subject in allData) {
             if (typeof allData[subject] !== 'object') continue;
@@ -127,12 +130,10 @@
     }
 
     window.startQuiz = (s, y, t) => {
-        // 로그인 체크
         if (!auth.currentUser) {
-            alert("문제를 풀려면 로그인이 필요합니다!");
+            alert("로그인이 필요한 서비스입니다.");
             return;
         }
-
         currentQuizSet = allData[s][y][t];
         currentIdx = 0;
         document.getElementById('main-screen').style.display = 'none';
@@ -145,11 +146,8 @@
         const q = currentQuizSet[currentIdx];
         document.getElementById('q-text').innerText = `${currentIdx + 1}. ${q.question}`;
         document.getElementById('page-num').innerText = `${currentIdx + 1} / ${currentQuizSet.length}`;
-        
         const optContainer = document.getElementById('options-container');
         optContainer.innerHTML = "";
-        
-        // options가 배열인지 확인 후 렌더링
         const options = Array.isArray(q.options) ? q.options : Object.values(q.options || {});
         options.forEach((opt, i) => {
             if(!opt) return;
