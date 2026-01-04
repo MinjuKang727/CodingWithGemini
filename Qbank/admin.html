@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Q-Bank 관리자 센터</title>
+    <style>
+        :root { --primary: #2c3e50; --success: #27ae60; --bg: #f4f7f6; }
+        body { font-family: 'Malgun Gothic', sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+        .hidden { display: none !important; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .admin-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; margin-bottom: 20px; padding-bottom: 10px; }
+        .selector-box { display: flex; gap: 10px; background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 25px; }
+        select, input, textarea { padding: 10px; border-radius: 5px; border: 1px solid #ddd; font-size: 14px; box-sizing: border-box; }
+        .q-card { border: 1px solid #ddd; padding: 20px; border-radius: 10px; margin-bottom: 20px; background: #fff; }
+        .common-area { background: #fff3e0; padding: 15px; border-radius: 8px; border: 1px solid #ffe0b2; margin-bottom: 15px; }
+        .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+        /* 저장 버튼 바 스타일 (하단 고정) */
+        .footer-bar { 
+            position: fixed; /* sticky 대신 fixed로 하면 더 확실히 보입니다 */
+            bottom: 20px; 
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 1000px;
+            background: rgba(255,255,255,0.95); 
+            padding: 15px 30px; 
+            border: 2px solid var(--success); 
+            border-radius: 10px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.1); 
+            z-index: 1000; 
+        }
+        .btn-save { background: var(--success); color: white; padding: 15px 40px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        /* 상시 고정 저장 버튼 (우측 중앙) */
+        .side-save-bar {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn-save-fixed {
+            background: var(--success);
+            color: white;
+            padding: 20px 15px;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            writing-mode: vertical-rl; /* 세로로 긴 버튼 (선택사항) */
+            text-orientation: upright;
+            font-size: 16px;
+            transition: 0.3s;
+        }
+
+        .btn-save-fixed:hover {
+            background: #219150;
+            transform: scale(1.05);
+        }
+
+        /* 우측 하단 TOP 버튼 */
+        .btn-top {
+            position: fixed;
+            right: 25px;
+            bottom: 25px;
+            width: 50px;
+            height: 50px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }   
+    </style>
+</head>
+<body>
+
+<div id="view-login" class="container" style="max-width:400px; text-align:center; margin-top:100px;">
+    <h2>🔒 관리자 인증</h2>
+    <button id="btn-google-login" style="background:#4285F4; color:white; border:none; padding:15px; width:100%; border-radius:5px; font-weight:bold; cursor:pointer;">Google 계정으로 로그인</button>
+</div>
+
+<div id="view-editor" class="container hidden">
+    <div class="admin-header">
+        <h1>🛠️ 문제 편집기 (공통지문 지원)</h1>
+        <button onclick="handleLogout()" style="background:#e74c3c; color:white; border:none; padding:8px 15px; border-radius:5px; cursor:pointer;">로그아웃</button>   
+    </div>
+
+    <div class="selector-box">
+        <select id="sel-subject" style="flex:1;"><option value="">과목 선택</option></select>
+        <select id="sel-exam" style="flex:1;"><option value="">회차 선택</option></select>
+        <button onclick="loadExamData()" style="background:var(--primary); color:white; border:none; padding:0 20px; border-radius:5px; cursor:pointer;">불러오기</button>
+    </div>
+
+    <div id="editor-list"></div>
+
+    <div id="fixed-save-area" class="side-save-bar">    
+        <button class="btn-save-fixed" onclick="saveToFirebase()">SAVE</button>
+    </div>
+
+    <button class="btn-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">TOP</button>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    // 본인 Firebase 설정으로 교체 필수
+    const firebaseConfig = {
+        apiKey: "AIzaSyCNnZltTeWoOodD7zmonx34RivTz6i8s04",
+        authDomain: "qbank-f4821.firebaseapp.com",
+        databaseURL: "https://qbank-f4821-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "qbank-f4821",
+        storageBucket: "qbank-f4821.firebasestorage.app",
+        messagingSenderId: "150452150398",
+        appId: "1:150452150398:web:a65a9ddfb8250c2895782f",
+        measurementId: "G-Z7527YKNKF"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+    const provider = new GoogleAuthProvider();
+
+    const adminEmails = ["minjukang727@gmail.com"]; // 관리자 Gmail
+    let allData = {}, currentPath = "";
+
+    document.getElementById('btn-google-login').addEventListener('click', () => signInWithPopup(auth, provider));
+
+    onAuthStateChanged(auth, (user) => {
+        if (user && adminEmails.includes(user.email)) {
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('view-editor').classList.remove('hidden');
+            onValue(ref(db, '/'), (snap) => {
+                allData = snap.val() || {};
+                const selSub = document.getElementById('sel-subject');
+                selSub.innerHTML = '<option value="">과목 선택</option>';
+                Object.keys(allData).forEach(s => selSub.innerHTML += `<option value="${s}">${s}</option>`);
+            });
+        }
+    });
+
+    document.getElementById('sel-subject').onchange = (e) => {
+        const sub = e.target.value;
+        const selExam = document.getElementById('sel-exam');
+        selExam.innerHTML = '<option value="">회차 선택</option>';
+        if(!allData[sub]) return;
+        Object.keys(allData[sub]).forEach(y => Object.keys(allData[sub][y]).forEach(t => {
+            selExam.innerHTML += `<option value="${y}/${t}">${y}년 ${t}</option>`;
+        }));
+    };
+
+    window.loadExamData = () => {
+        const sub = document.getElementById('sel-subject').value;
+        const path = document.getElementById('sel-exam').value;
+        if(!sub || !path) return alert("선택 후 클릭하세요.");
+
+        currentPath = `${sub}/${path}`;
+        const pathParts = path.split('/');
+        // 경로를 따라가서 해당 회차의 문제 배열을 가져옴
+        const questions = pathParts.reduce((o, k) => o[k], allData[sub]);
+        
+        const listArea = document.getElementById('editor-list');
+        listArea.innerHTML = "";
+
+        questions.forEach((q, i) => {
+            const card = document.createElement('div');
+            card.className = 'q-card';
+            card.innerHTML = `
+                <div class="common-area">
+                    <label>
+                        <input type="checkbox" id="is-com-${i}" ${q.isCommon ? 'checked' : ''} onchange="toggleCom(${i})"> 
+                        <b>공통 지문 설정 (해당 문항부터 적용)</b>
+                    </label>
+                    <div id="com-range-box-${i}" style="margin-top:10px; ${q.isCommon ? '' : 'display:none;'}">
+                        적용 범위: 
+                        <input type="number" id="com-start-${i}" value="${q.comStart || i+1}" style="width:50px;"> 번 ~ 
+                        <input type="number" id="com-end-${i}" value="${q.comEnd || i+1}" style="width:50px;"> 번
+                        <p style="font-size:0.8rem; color:#666; margin:5px 0;">* 이 지문이 표시될 시작 번호와 끝 번호를 입력하세요.</p>
+                    </div>
+                    <textarea id="com-txt-${i}" style="width:100%; margin-top:10px; ${q.isCommon ? '' : 'display:none;'}" rows="4" placeholder="지문을 입력하세요...">${q.commonText || ''}</textarea>
+                </div>
+
+                <div style="margin-top:15px;">
+                    <b>Q${i+1} 문제 내용:</b><br>
+                    <textarea id="q-txt-${i}" style="width:100%; margin-top:5px;" rows="2">${q.question}</textarea>
+                </div>
+
+                <div class="opt-grid">
+                    ${[0,1,2,3].map(oi => `
+                        <div>
+                            ${oi+1}) <input type="text" id="opt-${i}-${oi}" value="${q.options[oi] || ''}" style="width:80%;">
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div style="margin-top:10px;">
+                    <b>정답 (숫자만):</b> 
+                    <input type="number" id="ans-${i}" value="${q.answer}" style="width:50px;">
+                </div>
+
+                <div style="margin-top:10px;">
+                    <b>해설:</b><br>
+                    <textarea id="com-comment-${i}" style="width:100%; margin-top:5px;" rows="2">${q.commentary || ''}</textarea>
+                </div>
+            `;
+            listArea.appendChild(card);
+        });
+    };
+
+    // 지문 설정 체크박스 토글 함수
+    window.toggleCom = (i) => {
+        const isChecked = document.getElementById(`is-com-${i}`).checked;
+        document.getElementById(`com-range-box-${i}`).style.display = isChecked ? 'block' : 'none';
+        document.getElementById(`com-txt-${i}`).style.display = isChecked ? 'block' : 'none';
+    };
+
+    window.toggleCom = (i) => { document.getElementById(`com-txt-${i}`).style.display = document.getElementById(`is-com-${i}`).checked ? 'block' : 'none'; };
+
+    window.saveToFirebase = async () => {
+        // [추가] 데이터 로드 여부 체크 (안전장치)
+        if (!currentPath) {
+            alert("⚠️ 편집할 데이터를 먼저 '불러오기' 버튼을 눌러 로드해 주세요.");
+            return;
+        }
+
+        if(!confirm("수정된 내용을 DB에 최종 저장하시겠습니까?\n(수정된 내용은 복구할 수 없습니다.)")) return;
+        
+        const [sub, y, t] = currentPath.split('/');
+        // 불러온 데이터의 개수 파악
+        const count = document.querySelectorAll('.q-card').length; 
+        const updated = [];
+
+        try {
+            for(let i=0; i<count; i++) {
+                updated.push({
+                    isCommon: document.getElementById(`is-com-${i}`).checked,
+                    comStart: parseInt(document.getElementById(`com-start-${i}`).value) || 0,
+                    comEnd: parseInt(document.getElementById(`com-end-${i}`).value) || 0,
+                    commonText: document.getElementById(`com-txt-${i}`).value,
+                    question: document.getElementById(`q-txt-${i}`).value,
+                    options: [0,1,2,3].map(oi => document.getElementById(`opt-${i}-${oi}`).value),
+                    answer: parseInt(document.getElementById(`ans-${i}`).value),
+                    commentary: document.getElementById(`com-comment-${i}`).value
+                });
+            }
+
+            await set(ref(db, currentPath), updated);
+            alert("✅ 데이터베이스에 성공적으로 저장되었습니다!");
+            location.reload();
+        } catch (e) {
+            console.error(e);
+            alert("❌ 저장 실패: " + e.message);
+        }
+    };
+
+    window.handleLogout = () => {
+        if (confirm("로그아웃 하시겠습니까?")) {
+            signOut(auth).then(() => {
+                alert("정상적으로 로그아웃되었습니다.");
+                location.reload(); // 세션 종료 후 새로고침하여 로그인 화면으로 이동
+            }).catch((error) => {
+                console.error("Logout Error:", error);
+            });
+        }
+    };
+</script>
+</body>
+</html>

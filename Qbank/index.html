@@ -2,150 +2,479 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QBank - 자유로운 문제 풀이</title>
+    <title>KNOU 스마트 문제 은행 - 연결 복구</title>
     <style>
-        body { font-family: '맑은 고딕', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
-        .card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .subject-title { color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
-        .quiz-btn { background: #fff; border: 1px solid #dadce0; padding: 10px 15px; margin: 5px; border-radius: 20px; cursor: pointer; transition: 0.2s; }
-        .quiz-btn:hover { background: #e8f0fe; color: #1967d2; }
-        #quiz-screen { display: none; }
-        .option-btn { display: block; width: 100%; text-align: left; padding: 15px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; font-size: 1rem; }
-        .option-btn:hover { background: #f8f9fa; }
-        .wrong-badge { color: #d93025; font-size: 0.8rem; margin-left: 10px; font-weight: bold; }
-        .nav-btns { margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
-        button { cursor: pointer; padding: 10px 20px; border-radius: 6px; border: 1px solid #ccc; }
+        :root { --knou-blue: #004a94; --gold: #ffd700; --bg: #f4f7f9; --border: #dee2e6; --wrong: #e74c3c; --correct: #27ae60; }
+        body { font-family: 'Malgun Gothic', sans-serif; background: var(--bg); margin: 0; padding: 0; overflow: hidden; }
+        .hidden { display: none !important; }
+
+        /* 홈 화면 */
+        .home-container { max-width: 1000px; margin: 30px auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); height: 85vh; overflow-y: auto; }
+        .grid-layout { display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px; }
+        
+        /* 시험 화면 */
+        .exam-page { display: flex; flex-direction: column; height: 100vh; width: 100vw; background: #fff; }
+        .exam-header { background: var(--knou-blue); color: white; height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0; }
+        .exam-body { display: flex; flex: 1; overflow: hidden; }
+        
+        .question-area { flex: 1; overflow-y: auto; padding: 30px 50px; background: white; scroll-behavior: smooth; }
+        .omr-area { width: 380px; background: #f8f9fa; border-left: 2px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+        .omr-scroll { flex: 1; overflow-y: auto; padding: 15px; }
+        .omr-footer { padding: 15px; background: #fff; border-top: 1px solid var(--border); }
+
+        /* 문제의 공통지문 스타일 */
+        .common-text-box {
+            background-color: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            line-height: 1.6;
+            white-space: pre-wrap; /* 줄바꿈 유지 */
+            font-weight: 500;
+            color: #333;
+        }
+        .common-tag {
+            display: inline-block;
+            background: #6c757d;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+        }
+
+        /* 문제 UI */
+        .q-block { position: relative; padding: 25px; border: 1px solid #eee; border-radius: 12px; margin-bottom: 40px; background: #fff; }
+        .idx-btn { width: 22px; height: 22px; border: 2px solid #ccc; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; background: white; }
+        .idx-btn.checked { background: var(--gold); border-color: #e6c200; font-weight: bold; }
+        .idx-btn.checked::after { content: '✓'; color: #333; }
+        .opt-item { padding: 12px 15px; border: 1px solid #ddd; border-radius: 6px; margin: 8px 0; cursor: pointer; transition: 0.2s; }
+        .opt-item.selected { background: #e7f1ff; border-color: var(--knou-blue); font-weight: bold; }
+        
+        /* OMR 테이블 */
+        .omr-table { width: 100%; border-collapse: collapse; background: white; }
+        .omr-table tr { border-bottom: 1px solid #eee; height: 45px; }
+        .omr-num-cell { width: 40px; font-weight: bold; text-align: center; color: var(--knou-blue); cursor: pointer; }
+        .omr-circle { width: 28px; height: 28px; border: 1px solid #777; border-radius: 50%; display: inline-block; text-align: center; line-height: 28px; cursor: pointer; font-size: 0.85rem; margin: 0 2px; }
+        .omr-circle.marked { background: #333; color: white; border-color: #333; }
+
+        .btn { padding: 10px 18px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; }
+        .btn-blue { background: var(--knou-blue); color: white; }
+        .btn-dark { background: #333; color: white; }
+        
+        .history-card { background: #fdfdfd; border: 1px solid #ddd; border-radius: 10px; padding: 15px; margin-bottom: 15px; }
+        .nav-footer { position: sticky; bottom: 0; background: white; border-top: 1px solid #eee; padding: 15px; display: flex; justify-content: center; gap: 30px; align-items: center; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div id="main-screen">
-        <h1>📚 기출 문제 은행</h1>
-        <p>로그인 없이 바로 학습을 시작하세요!</p>
-        <div id="quiz-list">데이터를 불러오는 중...</div>
-    </div>
+<div id="setup-page" class="home-container">
+    <h1 style="text-align:center; color:var(--knou-blue); margin-bottom: 30px;">KNOU 스마트 문제 은행</h1>
+    <div class="grid-layout">
+        <div>
+            <h3>🛠 시험 설정</h3>
+            <label><b>과목 선택</b></label>
+            <select id="sel-subject" style="width:100%; padding:12px; margin:10px 0; border-radius:5px; border:1px solid #ccc;">
+                <option value="">데이터 로딩 중...</option>
+            </select>
+            
+            <label><b>시험 회차</b></label>
+            <div id="exam-radio-container" style="margin-top:8px; max-height:150px; overflow-y:auto; border:1px solid #eee; padding:10px; background:#fafafa; border-radius:5px;">
+                과목을 먼저 선택해 주세요.
+            </div>
+            
+            <div id="random-options" class="hidden" style="margin:15px 0; background:#eef2f7; padding:15px; border-radius:8px;">
+                <label><b>추출 문항 수</b></label>
+                <div style="margin-top:8px; display:flex; gap:10px;">
+                    <label><input type="radio" name="rd-cnt" value="15"> 15</label>
+                    <label><input type="radio" name="rd-cnt" value="25" checked> 25</label>
+                    <label><input type="radio" name="rd-cnt" value="40"> 40</label>
+                    <label><input type="radio" name="rd-cnt" value="50"> 50</label>
+                </div>
+            </div>
 
-    <div id="quiz-screen" class="card">
-        <button id="backBtn">⬅ 목록으로</button>
-        <h3 id="quiz-info"></h3>
-        <hr>
-        <div id="question-container">
-            <p id="q-text" style="font-size: 1.2rem; font-weight: bold; min-height: 60px;"></p>
-            <div id="options-container"></div>
+            <label><b>응시 방식</b></label>
+            <select id="sel-study-mode" style="width:100%; padding:12px; margin:10px 0; border-radius:5px;">
+                <option value="normal-all">일반: 전체 문제 한번에 보기 (OMR)</option>
+                <option value="normal-step">일반: 1문제씩 보기 (OMR)</option>
+                <option value="study">연습: 해설 보며 풀기 (1문제씩)</option>
+            </select>
+
+            <div style="margin-bottom:20px; background:#fff3e0; padding:12px; border-radius:8px;">
+                <label style="cursor:pointer; display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="extra-time-chk"> <b>시험 시간 연장 (특별관리대상)</b>
+                </label>
+            </div>
+            <button class="btn btn-blue" style="width:100%; height:55px;" onclick="prepareExam()">시험 시작</button>
         </div>
-        <div class="nav-btns">
-            <button id="prevBtn">이전</button>
-            <span id="page-num"></span>
-            <button id="nextBtn">다음</button>
+        <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="margin: 0;">📜 최근 풀이 기록</h3>
+                <button class="btn" style="background: #e74c3c; color: white; padding: 5px 10px; font-size: 0.8rem;" onclick="clearHistory()">기록 초기화</button>
+            </div>
+            <div id="history-container"></div>
         </div>
+    </div>
+</div>
+
+<div id="exam-page" class="exam-page hidden">
+    <div class="exam-header">
+        <button class="btn" style="background:rgba(255,255,255,0.2); color:white;" onclick="exitToHome()">🏠 홈으로</button>
+        <div id="exam-title" style="font-weight:bold;"></div>
+        <div id="timer-display" style="font-size:1.4rem; color:var(--gold); font-weight:bold;">00:00</div>
+    </div>
+    <div class="exam-body">
+        <div class="question-area" id="q-container"></div>
+        <div class="omr-area" id="omr-panel">
+            <div class="omr-scroll">
+                <h4 style="text-align:center; margin-top:0;">OMR 답안지</h4>
+                <table class="omr-table">
+                    <tbody id="omr-rows-target"></tbody>
+                </table>
+            </div>
+            <div class="omr-footer"><button class="btn btn-dark" style="width:100%;" onclick="confirmSubmit()">최종 제출</button></div>
+        </div>
+    </div>
+    <div id="step-nav" class="nav-footer hidden">
+        <button class="btn btn-dark" onclick="moveIdx(-1)">이전</button>
+        <div id="step-count" style="font-weight:bold;"></div>
+        <button class="btn btn-dark" onclick="moveIdx(1)">다음</button>
+    </div>
+</div>
+
+<div id="result-page" class="hidden" style="overflow-y:auto; height:100vh; background:#fff; padding:40px;">
+    <div style="max-width:850px; margin:0 auto;">
+        <h1 style="text-align:center; color:var(--knou-blue);">시험 결과</h1>
+        <div id="result-summary" style="background:#f8f9fa; padding:25px; border-radius:12px; margin-bottom:30px; display:grid; grid-template-columns:1fr 1fr; gap:15px; border:1px solid #eee;"></div>
+        <h3 style="color:var(--wrong);">❌ 오답 확인</h3>
+        <div id="wrong-detail-list"></div>
+        <button class="btn btn-blue" style="width:100%; margin-top:30px;" onclick="location.reload()">홈으로</button>
+    </div>
+</div>
+
+<div id="review-page" class="hidden" style="overflow-y:auto; height:100vh; background:#fff; padding:40px;">
+    <div style="max-width:850px; margin:0 auto;">
+        <button class="btn btn-dark" onclick="closeReview()">← 목록으로 돌아가기</button>
+        <h1 id="review-title" style="text-align:center; color:var(--knou-blue); margin-top:20px;"></h1>
+        <div id="review-summary" style="background:#f8f9fa; padding:20px; border-radius:12px; margin-bottom:30px; border:1px solid #eee; display:flex; justify-content:space-around; font-weight:bold;"></div>
+        
+        <h3 style="color:var(--wrong); border-bottom:2px solid var(--wrong); padding-bottom:10px;">❌ 다시 보기 (오답 및 전체 보기)</h3>
+        <div id="review-detail-list"></div>
+        
+        <button class="btn btn-blue" style="width:100%; margin-top:30px;" onclick="closeReview()">확인 완료</button>
     </div>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyCNnZltTeWoOodD7zmonx34RivTz6i8s04",
-        authDomain: "qbank-f4821.firebaseapp.com",
-        databaseURL: "https://qbank-f4821-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "qbank-f4821"
-    };
-
+    const firebaseConfig = { databaseURL: "https://qbank-f4821-default-rtdb.asia-southeast1.firebasedatabase.app" };
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    let allData = {};
-    let currentQuizSet = [];
-    let currentIdx = 0;
-    let currentQuizId = ""; // 오답 기록용 ID
+    let quizData = {}, currentQs = [], userAnswers = {}, indexMarks = {}, currentIdx = 0;
+    let examInfo = { sub: "", title: "", mode: "" };
+    let timeLeft = 0, initialTime = 0, timerInterval = null;
 
-    // 1. 데이터 로드 (로그인 체크 없이 즉시 실행)
-    onValue(ref(db, '/'), (snapshot) => {
-        allData = snapshot.val() || {};
-        renderList();
-    });
-
-    function renderList() {
-        const listDiv = document.getElementById('quiz-list');
-        let html = "";
-        
-        // 로컬스토리지에서 오답 기록 가져오기
-        const wrongAnswers = JSON.parse(localStorage.getItem('wrong_quizzes') || "{}");
-
-        for (let subject in allData) {
-            if (typeof allData[subject] !== 'object') continue;
-            html += `<div class="card"><h2 class="subject-title">📘 ${subject}</h2>`;
-            for (let year in allData[subject]) {
-                for (let type in allData[subject][year]) {
-                    const id = `${subject}_${year}_${type}`;
-                    const wrongCount = wrongAnswers[id] ? ` <span class="wrong-badge">❌ 오답 있음</span>` : "";
-                    html += `<button class="quiz-btn" data-s="${subject}" data-y="${year}" data-t="${type}">
-                                ${year}년 ${type}${wrongCount}
-                             </button>`;
-                }
+    async function init() {
+        renderHistory();
+        const subSel = document.getElementById('sel-subject');
+        try {
+            const snapshot = await get(ref(db, '/'));
+            if (snapshot.exists()) {
+                quizData = snapshot.val();
+                updateSubjectList();
+            } else {
+                subSel.innerHTML = '<option>데이터가 존재하지 않습니다.</option>';
             }
-            html += `</div>`;
+        } catch (error) {
+            subSel.innerHTML = '<option>연결 오류</option>';
         }
-        listDiv.innerHTML = html || "데이터가 없습니다.";
-
-        document.querySelectorAll('.quiz-btn').forEach(btn => {
-            btn.onclick = () => startQuiz(btn.dataset.s, btn.dataset.y, btn.dataset.t);
+        onValue(ref(db, '/'), (snap) => {
+            if(snap.exists()) { quizData = snap.val(); updateSubjectList(); }
         });
     }
 
-    function startQuiz(s, y, t) {
-        currentQuizId = `${s}_${y}_${t}`;
-        currentQuizSet = allData[s][y][t];
-        currentIdx = 0;
-        document.getElementById('main-screen').style.display = 'none';
-        document.getElementById('quiz-screen').style.display = 'block';
-        document.getElementById('quiz-info').innerText = `${s} (${y}년 ${t})`;
-        displayQuestion();
-    }
-
-    function displayQuestion() {
-        const q = currentQuizSet[currentIdx];
-        document.getElementById('q-text').innerText = `${currentIdx + 1}. ${q.question}`;
-        document.getElementById('page-num').innerText = `${currentIdx + 1} / ${currentQuizSet.length}`;
-        
-        const optContainer = document.getElementById('options-container');
-        optContainer.innerHTML = "";
-        
-        const options = Array.isArray(q.options) ? q.options : Object.values(q.options || {});
-        options.forEach((opt, i) => {
-            const btn = document.createElement('button');
-            btn.className = 'option-btn';
-            btn.innerText = `${i + 1}) ${opt}`;
-            btn.onclick = () => checkAnswer(i + 1, q.answer);
-            optContainer.appendChild(btn);
-        });
-    }
-
-    // 2. 정답 체크 및 오답 관리 (localStorage 활용)
-    function checkAnswer(selected, correct) {
-        if (String(selected) === String(correct)) {
-            alert("✅ 정답입니다!");
-        } else {
-            alert(`❌ 틀렸습니다! 정답은 ${correct}번입니다.`);
-            
-            // 오답 기록 저장
-            let wrongAnswers = JSON.parse(localStorage.getItem('wrong_quizzes') || "{}");
-            wrongAnswers[currentQuizId] = true;
-            localStorage.setItem('wrong_quizzes', JSON.stringify(wrongAnswers));
+    function updateSubjectList() {
+        const subSel = document.getElementById('sel-subject');
+        const subjects = Object.keys(quizData);
+        if (subjects.length > 0) {
+            subSel.innerHTML = '<option value="">과목 선택</option>';
+            subjects.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s; opt.textContent = s;
+                subSel.appendChild(opt);
+            });
         }
     }
 
-    document.getElementById('nextBtn').onclick = () => { if (currentIdx < currentQuizSet.length - 1) { currentIdx++; displayQuestion(); } };
-    document.getElementById('prevBtn').onclick = () => { if (currentIdx > 0) { currentIdx--; displayQuestion(); } };
-    document.getElementById('backBtn').onclick = () => {
-        document.getElementById('main-screen').style.display = 'block';
-        document.getElementById('quiz-screen').style.display = 'none';
-        renderList(); // 목록으로 갈 때 오답 배지 갱신
+    document.getElementById('sel-subject').onchange = (e) => {
+        const sub = e.target.value;
+        const cont = document.getElementById('exam-radio-container');
+        if(!sub || !quizData[sub]) { cont.innerHTML = "회차 정보가 없습니다."; return; }
+        cont.innerHTML = `<label style="display:block; margin:5px 0;"><input type="radio" name="exam-sel" value="random" onchange="toggleRandom(true)"> 🎲 전체 랜덤 기출</label>`;
+        Object.keys(quizData[sub]).forEach(y => {
+            Object.keys(quizData[sub][y]).forEach(t => {
+                cont.innerHTML += `<label style="display:block; margin:5px 0;"><input type="radio" name="exam-sel" value="${y}|${t}" onchange="toggleRandom(false)"> ${y}년 ${t}</label>`;
+            });
+        });
     };
+
+    window.toggleRandom = (isRand) => document.getElementById('random-options').classList.toggle('hidden', !isRand);
+    window.exitToHome = () => { if(confirm("종료하시겠습니까?")) location.reload(); };
+
+    window.prepareExam = () => {
+        const sub = document.getElementById('sel-subject').value;
+        const sel = document.querySelector('input[name="exam-sel"]:checked');
+        if(!sub || !sel) return alert("과목과 회차를 선택하세요.");
+
+        examInfo.sub = sub;
+        examInfo.mode = document.getElementById('sel-study-mode').value;
+        userAnswers = {}; indexMarks = {}; currentIdx = 0;
+
+        if(sel.value === 'random') {
+            const cnt = parseInt(document.querySelector('input[name="rd-cnt"]:checked').value);
+            let pool = [];
+            Object.values(quizData[sub]).forEach(y => Object.values(y).forEach(l => pool = pool.concat(l)));
+            currentQs = pool.sort(() => Math.random() - 0.5).slice(0, cnt);
+            examInfo.title = `랜덤 ${cnt}문항`;
+        } else {
+            const [y, t] = sel.value.split('|');
+            currentQs = quizData[sub][y][t];
+            examInfo.title = `${y}년 ${t}`;
+        }
+
+        const isExtra = document.getElementById('extra-time-chk').checked;
+        let base = (currentQs.length <= 15) ? 15 : (currentQs.length <= 25) ? 25 : 50;
+        initialTime = (base + (isExtra ? 10 : 0)) * 60;
+        timeLeft = initialTime;
+
+        document.getElementById('setup-page').classList.add('hidden');
+        document.getElementById('exam-page').classList.remove('hidden');
+        document.getElementById('exam-title').innerText = `[${sub}] ${examInfo.title}`;
+        document.getElementById('omr-panel').classList.toggle('hidden', examInfo.mode === 'study');
+        document.getElementById('step-nav').classList.toggle('hidden', examInfo.mode === 'normal-all');
+
+        startTimer();
+        renderExam();
+    };
+
+    function renderExam() {
+        const qCont = document.getElementById('q-container');
+        qCont.innerHTML = '';
+        
+        // 현재 보여줄 문제 리스트 결정 (전체보기 vs 1문제씩)
+        const list = (examInfo.mode === 'normal-all') ? currentQs : [currentQs[currentIdx]];
+        
+        list.forEach((q, i) => {
+            const num = (examInfo.mode === 'normal-all') ? i + 1 : currentIdx + 1;
+            const block = document.createElement('div');
+            block.className = 'q-block';
+            block.id = `q-row-${num}`;
+
+            // --- [추가] 공통 지문 로직 시작 ---
+            let commonHtml = '';
+            // 현재 문제 번호(num)가 어느 문제의 공통지문 범위(comStart ~ comEnd)에 속하는지 검색
+            const commonSource = currentQs.find(item => 
+                item.isCommon && (num >= item.comStart && num <= item.comEnd)
+            );
+
+            if (commonSource) {
+                commonHtml = `
+                    <div class="common-text-box">
+                        <div class="common-tag">지문 참조 (${commonSource.comStart}~${commonSource.comEnd})</div>
+                        <div style="white-space: pre-wrap;">${commonSource.commonText}</div>
+                    </div>
+                `;
+            }
+            // --- [추가] 공통 지문 로직 끝 ---
+
+            block.innerHTML = `
+                ${commonHtml} 
+                <div style="position:absolute; top:15px; left:15px;">
+                    <div class="idx-btn ${indexMarks[num]?'checked':''}" onclick="toggleIdx(${num})"></div>
+                </div>
+                <div style="margin-left:35px;">
+                    <div style="font-weight:bold; margin-bottom:15px;">${num}. ${q.question}</div>
+                    ${q.options.map((opt, oi) => `
+                        <div class="opt-item ${userAnswers[num]==oi+1?'selected':''}" onclick="mark(${num}, ${oi+1})">
+                            ${oi+1}) ${opt}
+                        </div>
+                    `).join('')}
+                    <div id="study-res-${num}"></div>
+                    ${examInfo.mode==='study' ? `
+                        <button class="btn btn-blue" style="width:100%; margin-top:10px;" 
+                                onclick="checkStudy(${num}, ${q.answer}, '${(q.commentary||'').replace(/'/g, "\\'")}')">
+                            정답 확인
+                        </button>` : ''}
+                </div>`;
+            qCont.appendChild(block);
+        });
+
+        if(examInfo.mode !== 'study') renderOMR();
+        if(examInfo.mode !== 'normal-all') document.getElementById('step-count').innerText = `${currentIdx+1} / ${currentQs.length}`;
+    }
+
+    function renderOMR() {
+        const target = document.getElementById('omr-rows-target');
+        target.innerHTML = '';
+        currentQs.forEach((_, i) => {
+            const n = i + 1;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td class="omr-num-cell" onclick="scrollToQ(${n})">${n}</td><td style="text-align:center;">${[1,2,3,4,5].map(v => `<div class="omr-circle ${userAnswers[n]==v?'marked':''}" onclick="mark(${n},${v})">${v}</div>`).join('')}</td><td style="text-align:center;"><div class="idx-btn ${indexMarks[n]?'checked':''}" onclick="toggleIdx(${n})"></div></td>`;
+            target.appendChild(tr);
+        });
+    }
+
+    window.mark = (n, v) => { userAnswers[n] = v; renderExam(); };
+    window.toggleIdx = (n) => { indexMarks[n] = !indexMarks[n]; renderExam(); };
+    window.scrollToQ = (n) => { if(examInfo.mode === 'normal-all') document.getElementById(`q-row-${n}`).scrollIntoView({ behavior: 'smooth' }); else { currentIdx = n - 1; renderExam(); } };
+    window.moveIdx = (dir) => { const next = currentIdx + dir; if(next >= 0 && next < currentQs.length) { currentIdx = next; renderExam(); } };
+
+    window.checkStudy = (n, ans, comm) => {
+        if(!userAnswers[n]) return alert("답안을 선택하세요.");
+        const isR = String(userAnswers[n]) === String(ans);
+        document.getElementById(`study-res-${n}`).innerHTML = `<div style="padding:10px; margin-top:10px; background:#f0f0f0; border-radius:5px;"><b>${isR?'⭕ 정답':'❌ 오답'} (정답: ${ans})</b><br>${comm}</div>`;
+    };
+
+    function startTimer() { timerInterval = setInterval(() => { timeLeft--; const m = Math.floor(timeLeft/60), s = timeLeft%60; document.getElementById('timer-display').innerText = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; if(timeLeft <= 0) { clearInterval(timerInterval); showResults(); } }, 1000); }
+    window.confirmSubmit = () => { if(confirm("제출하시겠습니까?")) { clearInterval(timerInterval); showResults(); } };
+
+    function showResults() {
+        let correct = 0;
+        let wrongIndices = []; // 문항 번호만 담을 배열
+
+        currentQs.forEach((q, i) => {
+            const n = i + 1;
+            const uAns = userAnswers[n];
+            if (String(uAns) === String(q.answer)) {
+                correct++;
+            } else {
+                // [수정] 전체 데이터를 저장하지 않고 번호와 내 답안만 저장
+                wrongIndices.push({
+                    n: n,           // 문항 번호
+                    user: uAns || "미표기" // 내가 쓴 답
+                });
+            }
+        });
+
+        const score = Math.round((correct / currentQs.length) * 100);
+        
+        // [핵심] 저장 데이터 경량화
+        const record = {
+            date: new Date().toLocaleString(),
+            sub: examInfo.sub,      // 과목 (조회 키)
+            title: examInfo.title,  // 회차 (조회 키)
+            score: score,
+            wrongs: wrongIndices,   // 인덱스 정보만 포함
+            isRandom: examInfo.title.includes("랜덤") // 랜덤 시험 여부 체크
+        };
+
+        const history = JSON.parse(localStorage.getItem('knou_history') || '[]');
+        history.unshift(record);
+        localStorage.setItem('knou_history', JSON.stringify(history.slice(0, 15))); // 최대 15개 유지
+
+        document.getElementById('exam-page').classList.add('hidden');
+        document.getElementById('result-page').classList.remove('hidden');
+        
+        // 결과창에서는 현재 메모리에 로드된 currentQs를 그대로 사용해 즉시 렌더링
+        renderReviewList('wrong-detail-list', record); 
+        renderHistory();
+    }
+
+    function renderReviewList(targetId, record) {
+        const target = document.getElementById(targetId);
+        let sourceQs = [];
+        if (!record.isRandom) {
+            const [year, term] = record.title.split('년 ');
+            if (quizData[record.sub] && quizData[record.sub][year] && quizData[record.sub][year][term]) {
+                sourceQs = quizData[record.sub][year][term];
+            }
+        }
+
+        if (record.wrongs.length === 0) {
+            target.innerHTML = '<p style="text-align:center; padding:40px;">오답이 없습니다. 훌륭합니다!</p>';
+            return;
+        }
+
+        target.innerHTML = record.wrongs.map(w => {
+            const originalQ = sourceQs[w.n - 1];
+            if (!originalQ) return `<div class="q-block">기출 회차 정보를 찾을 수 없습니다.</div>`;
+
+            // 복습 시에도 공통 지문 찾기
+            const commonSource = sourceQs.find(item => 
+                item.isCommon && (w.n >= item.comStart && w.n <= item.comEnd)
+            );
+
+            return `
+                <div class="q-block" style="border-left:5px solid var(--wrong); margin-bottom:25px; padding:20px;">
+                    ${commonSource ? `<div class="common-text-box" style="font-size:0.9rem; margin-bottom:15px;">${commonSource.commonText}</div>` : ''}
+                    <div style="font-weight:bold; margin-bottom:15px;">${w.n}번. ${originalQ.question}</div>
+                    <div style="margin-bottom:15px;">
+                        ${originalQ.options.map((opt, oi) => {
+                            const num = oi + 1;
+                            const isU = String(num) === String(w.user);
+                            const isA = String(num) === String(originalQ.answer);
+                            let bg = isA ? "#f0fff4" : (isU ? "#fff5f5" : "#fff");
+                            let bc = isA ? "var(--correct)" : (isU ? "var(--wrong)" : "#ddd");
+                            return `<div style="padding:10px; margin:5px 0; border:1px solid ${bc}; background:${bg}; border-radius:6px;">
+                                ${num}) ${opt} ${isA ? '<b>[정답]</b>' : ''} ${isU && !isA ? '<b>[내 선택]</b>' : ''}
+                            </div>`;
+                        }).join('')}
+                    </div>
+                    <div style="background:#f8f9fa; padding:12px; border-radius:8px; font-size:0.9rem;">
+                        <b>💡 해설:</b> ${originalQ.commentary || '해설 없음'}
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    window.openReview = (idx) => {
+        const history = JSON.parse(localStorage.getItem('knou_history') || '[]');
+        const data = history[idx];
+        if (!data) return;
+
+        document.getElementById('setup-page').classList.add('hidden');
+        document.getElementById('review-page').classList.remove('hidden');
+        document.getElementById('review-title').innerText = `${data.sub} 복습`;
+        document.getElementById('review-summary').innerHTML = `
+            <span>회차: ${data.title}</span>
+            <span>점수: ${data.score}점</span>
+            <span>오답: ${data.wrongs.length}</span>
+        `;
+
+        renderReviewList('review-detail-list', data);
+        document.getElementById('review-page').scrollTop = 0;
+    };
+
+    window.closeReview = () => {
+        document.getElementById('review-page').classList.add('hidden');
+        document.getElementById('setup-page').classList.remove('hidden');
+    };
+
+    function renderHistory() {
+        const cont = document.getElementById('history-container');
+        const history = JSON.parse(localStorage.getItem('knou_history') || '[]');
+        if(!history.length) { cont.innerHTML = '<p style="text-align:center;">기록이 없습니다.</p>'; return; }
+        cont.innerHTML = history.map((h, i) => `
+            <div class="history-card" onclick="openReview(${i})" style="cursor:pointer; padding:15px; border:1px solid #ddd; margin-bottom:10px; border-radius:10px;">
+                <div style="display:flex; justify-content:space-between;"><b>${h.sub}</b> <span>${h.score}점</span></div>
+                <small>${h.title} | ${h.date}</small>
+            </div>`).join('');
+    }
+
+    // [추가] 모든 응시 기록 삭제 함수
+    window.clearHistory = () => {
+        if (confirm("저장된 모든 응시 기록을 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.")) {
+            localStorage.removeItem('knou_history'); // 데이터 삭제
+            renderHistory(); // 화면 갱신
+            alert("모든 기록이 초기화되었습니다.");
+        }
+    };
+
+    init();
 </script>
 </body>
 </html>
