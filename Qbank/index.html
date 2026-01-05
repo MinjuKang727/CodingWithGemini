@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>KNOU 스마트 문제 은행 - 연결 복구</title>
+    <title>KNOU 스마트 문제 은행</title>
     <style>
         :root { --knou-blue: #004a94; --gold: #ffd700; --bg: #f4f7f9; --border: #dee2e6; --wrong: #e74c3c; --correct: #27ae60; }
         body { font-family: 'Malgun Gothic', sans-serif; background: var(--bg); margin: 0; padding: 0; overflow: hidden; }
@@ -23,26 +23,12 @@
         .omr-footer { padding: 15px; background: #fff; border-top: 1px solid var(--border); }
 
         /* 문제의 공통지문 스타일 */
-        .common-text-box {
-            background-color: #f8f9fa;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            line-height: 1.6;
-            white-space: pre-wrap; /* 줄바꿈 유지 */
-            font-weight: 500;
-            color: #333;
-        }
-        .common-tag {
-            display: inline-block;
-            background: #6c757d;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            margin-bottom: 10px;
-        }
+        .common-text-box { background-color: #fff9db; border: 2px solid #fab005; border-radius: 8px; padding: 20px; margin-bottom: 25px; line-height: 1.7; white-space: pre-wrap; font-weight: 500; color: #333; }
+        .common-tag { display: inline-block; background: #fab005; color: #000; padding: 2px 10px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; margin-bottom: 12px; }
+
+        /* 이미지 스타일 - 문제 바로 아래 배치 */
+        .q-image-container { margin: 15px 0; text-align: left; background: #fff; }
+        .q-image-container img { max-width: 45%; height: auto; border: 1px solid #eee; border-radius: 4px; }
 
         /* 문제 UI */
         .q-block { position: relative; padding: 25px; border: 1px solid #eee; border-radius: 12px; margin-bottom: 40px; background: #fff; }
@@ -65,6 +51,12 @@
         
         .history-card { background: #fdfdfd; border: 1px solid #ddd; border-radius: 10px; padding: 15px; margin-bottom: 15px; }
         .nav-footer { position: sticky; bottom: 0; background: white; border-top: 1px solid #eee; padding: 15px; display: flex; justify-content: center; gap: 30px; align-items: center; }
+
+        .top-btn { position: fixed; bottom: 30px; right: 30px; width: 50px; height: 50px; background: var(--knou-blue); color: white; border-radius: 50%; border: none; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 1000; display: none; }
+
+        /* 정답 강조 스타일 */
+        .correct-highlight { background-color: #e6fcf5 !important; border: 2px solid var(--correct) !important; color: var(--correct); font-weight: bold; }
+        .wrong-highlight { background-color: #fff5f5 !important; border: 2px solid var(--wrong) !important; }
     </style>
 </head>
 <body>
@@ -145,11 +137,14 @@
 
 <div id="result-page" class="hidden" style="overflow-y:auto; height:100vh; background:#fff; padding:40px;">
     <div style="max-width:850px; margin:0 auto;">
+        <div style="display: flex; justify-content: flex-start; margin-bottom: 20px;">
+            <button class="btn btn-dark" onclick="location.reload()">🏠 홈으로 돌아가기</button>
+        </div>
         <h1 style="text-align:center; color:var(--knou-blue);">시험 결과</h1>
         <div id="result-summary" style="background:#f8f9fa; padding:25px; border-radius:12px; margin-bottom:30px; display:grid; grid-template-columns:1fr 1fr; gap:15px; border:1px solid #eee;"></div>
-        <h3 style="color:var(--wrong);">❌ 오답 확인</h3>
+        <h3 style="color:var(--wrong);">❌ 오답 및 정답 확인</h3>
         <div id="wrong-detail-list"></div>
-        <button class="btn btn-blue" style="width:100%; margin-top:30px;" onclick="location.reload()">홈으로</button>
+        <button class="btn btn-blue" style="width:100%; margin-top:30px; height: 50px;" onclick="location.reload()">홈으로</button>
     </div>
 </div>
 
@@ -158,13 +153,13 @@
         <button class="btn btn-dark" onclick="closeReview()">← 목록으로 돌아가기</button>
         <h1 id="review-title" style="text-align:center; color:var(--knou-blue); margin-top:20px;"></h1>
         <div id="review-summary" style="background:#f8f9fa; padding:20px; border-radius:12px; margin-bottom:30px; border:1px solid #eee; display:flex; justify-content:space-around; font-weight:bold;"></div>
-        
         <h3 style="color:var(--wrong); border-bottom:2px solid var(--wrong); padding-bottom:10px;">❌ 다시 보기 (오답 및 전체 보기)</h3>
         <div id="review-detail-list"></div>
-        
         <button class="btn btn-blue" style="width:100%; margin-top:30px;" onclick="closeReview()">확인 완료</button>
     </div>
 </div>
+
+<button id="btn-top" class="top-btn" onclick="scrollToTop()">TOP</button>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -178,11 +173,44 @@
     let examInfo = { sub: "", title: "", mode: "" };
     let timeLeft = 0, initialTime = 0, timerInterval = null;
 
+    function getSafeImageUrl(data) {
+        if (!data || (typeof data === 'string' && data.trim() === "")) return null;
+        let src = data.toString().trim();
+        if (!src.startsWith('data:') && !src.startsWith('http')) {
+            src = `data:image/png;base64,${src}`;
+        }
+        return src;
+    }
+
+    window.scrollToTop = () => {
+        window.scrollTo({top: 0, behavior: 'smooth'});
+        document.querySelector('.question-area').scrollTop = 0;
+        document.getElementById('result-page').scrollTop = 0;
+        document.getElementById('review-page').scrollTop = 0;
+    };
+
+    function handleGlobalScroll() {
+        const btn = document.getElementById('btn-top');
+        const examScroll = document.querySelector('.question-area').scrollTop;
+        const resultScroll = document.getElementById('result-page').scrollTop;
+        const reviewScroll = document.getElementById('review-page').scrollTop;
+        const winScroll = window.scrollY || document.documentElement.scrollTop;
+
+        if (winScroll > 200 || examScroll > 200 || resultScroll > 200 || reviewScroll > 200) {
+            btn.style.display = "block";
+        } else {
+            btn.style.display = "none";
+        }
+    }
+
+    window.addEventListener('scroll', handleGlobalScroll);
+    document.addEventListener('scroll', handleGlobalScroll, true); 
+
     async function init() {
         renderHistory();
         const subSel = document.getElementById('sel-subject');
         try {
-            const snapshot = await get(ref(db, '/'));
+            const snapshot = await get(ref(db, 'quizzes'));
             if (snapshot.exists()) {
                 quizData = snapshot.val();
                 updateSubjectList();
@@ -192,19 +220,24 @@
         } catch (error) {
             subSel.innerHTML = '<option>연결 오류</option>';
         }
-        onValue(ref(db, '/'), (snap) => {
-            if(snap.exists()) { quizData = snap.val(); updateSubjectList(); }
+        
+        onValue(ref(db, 'quizzes'), (snap) => {
+            if(snap.exists()) { 
+                quizData = snap.val(); 
+                updateSubjectList(); 
+            }
         });
     }
 
     function updateSubjectList() {
         const subSel = document.getElementById('sel-subject');
-        const subjects = Object.keys(quizData);
+        const subjects = Object.keys(quizData); 
         if (subjects.length > 0) {
             subSel.innerHTML = '<option value="">과목 선택</option>';
             subjects.forEach(s => {
                 const opt = document.createElement('option');
-                opt.value = s; opt.textContent = s;
+                opt.value = s; 
+                opt.textContent = s;
                 subSel.appendChild(opt);
             });
         }
@@ -213,11 +246,19 @@
     document.getElementById('sel-subject').onchange = (e) => {
         const sub = e.target.value;
         const cont = document.getElementById('exam-radio-container');
-        if(!sub || !quizData[sub]) { cont.innerHTML = "회차 정보가 없습니다."; return; }
+        if(!sub || !quizData[sub]) { 
+            cont.innerHTML = "회차 정보가 없습니다."; 
+            return; 
+        }
         cont.innerHTML = `<label style="display:block; margin:5px 0;"><input type="radio" name="exam-sel" value="random" onchange="toggleRandom(true)"> 🎲 전체 랜덤 기출</label>`;
-        Object.keys(quizData[sub]).forEach(y => {
-            Object.keys(quizData[sub][y]).forEach(t => {
-                cont.innerHTML += `<label style="display:block; margin:5px 0;"><input type="radio" name="exam-sel" value="${y}|${t}" onchange="toggleRandom(false)"> ${y}년 ${t}</label>`;
+        const years = Object.keys(quizData[sub]);
+        years.forEach(y => {
+            const types = Object.keys(quizData[sub][y]);
+            types.forEach(t => {
+                cont.innerHTML += `
+                    <label style="display:block; margin:5px 0; cursor:pointer;">
+                        <input type="radio" name="exam-sel" value="${y}|${t}" onchange="toggleRandom(false)"> ${y} ${t}시험
+                    </label>`;
             });
         });
     };
@@ -261,11 +302,30 @@
         renderExam();
     };
 
-    function renderExam() {
+    const DUP_ANSWER_MAP = {
+        "A": [1, 2], "B": [1, 3], "C": [1, 4], "D": [2, 3], 
+        "E": [2, 4], "F": [3, 4], "G": [1, 2, 3], "H": [1, 2, 4], 
+        "I": [1, 3, 4], "J": [2, 3, 4], "K": [1, 2, 3, 4]
+    };
+
+    function toCircleNum(n) {
+        const circleNums = { 1: "①", 2: "②", 3: "③", 4: "④", 5: "⑤" };
+        const val = String(n).toUpperCase();
+        if (DUP_ANSWER_MAP[val]) return DUP_ANSWER_MAP[val].map(num => circleNums[num] || num).join(", ");
+        return circleNums[val] || val;
+    }
+
+    function checkIsCorrect(userAns, quizAns) {
+        if (!userAns) return false;
+        const correctVal = String(quizAns).toUpperCase();
+        const userVal = Number(userAns);
+        if (DUP_ANSWER_MAP[correctVal]) return DUP_ANSWER_MAP[correctVal].includes(userVal);
+        return String(userVal) === correctVal;
+    }
+
+    window.renderExam = () => {
         const qCont = document.getElementById('q-container');
         qCont.innerHTML = '';
-        
-        // 현재 보여줄 문제 리스트 결정 (전체보기 vs 1문제씩)
         const list = (examInfo.mode === 'normal-all') ? currentQs : [currentQs[currentIdx]];
         
         list.forEach((q, i) => {
@@ -274,125 +334,142 @@
             block.className = 'q-block';
             block.id = `q-row-${num}`;
 
-            // --- [추가] 공통 지문 로직 시작 ---
+            const commonSource = currentQs.find(item => item.isCommon && (num >= item.comStart && num <= item.comEnd));
             let commonHtml = '';
-            // 현재 문제 번호(num)가 어느 문제의 공통지문 범위(comStart ~ comEnd)에 속하는지 검색
-            const commonSource = currentQs.find(item => 
-                item.isCommon && (num >= item.comStart && num <= item.comEnd)
-            );
-
-            if (commonSource) {
-                commonHtml = `
-                    <div class="common-text-box">
-                        <div class="common-tag">지문 참조 (${commonSource.comStart}~${commonSource.comEnd})</div>
-                        <div style="white-space: pre-wrap;">${commonSource.commonText}</div>
-                    </div>
-                `;
+            if (commonSource && (examInfo.mode !== 'normal-all' || num === commonSource.comStart)) {
+                commonHtml = `<div class="common-text-box"><div class="common-tag">지문 참조 (${commonSource.comStart}~${commonSource.comEnd})</div><div>${commonSource.commonText}</div></div>`;
             }
-            // --- [추가] 공통 지문 로직 끝 ---
 
+            const imgSrc = getSafeImageUrl(q.image_data || q.image_url || q.img || q.image); 
+            const imageHtml = imgSrc ? `<div class="q-image-container"><img src="${imgSrc}" onerror="this.parentElement.style.display='none'"></div>` : '';
+
+            // 순서 변경: 질문 -> 이미지 -> 옵션
             block.innerHTML = `
-                ${commonHtml} 
+                ${commonHtml}
                 <div style="position:absolute; top:15px; left:15px;">
                     <div class="idx-btn ${indexMarks[num]?'checked':''}" onclick="toggleIdx(${num})"></div>
                 </div>
                 <div style="margin-left:35px;">
                     <div style="font-weight:bold; margin-bottom:15px;">${num}. ${q.question}</div>
+                    ${imageHtml}
                     ${q.options.map((opt, oi) => `
                         <div class="opt-item ${userAnswers[num]==oi+1?'selected':''}" onclick="mark(${num}, ${oi+1})">
                             ${oi+1}) ${opt}
                         </div>
                     `).join('')}
                     <div id="study-res-${num}"></div>
-                    ${examInfo.mode==='study' ? `
-                        <button class="btn btn-blue" style="width:100%; margin-top:10px;" 
-                                onclick="checkStudy(${num}, ${q.answer}, '${(q.commentary||'').replace(/'/g, "\\'")}')">
-                            정답 확인
-                        </button>` : ''}
+                    ${examInfo.mode==='study' ? `<button class="btn btn-blue" style="width:100%; margin-top:15px;" onclick="checkStudy(${num}, ${q.answer}, '${(q.commentary||'').replace(/'/g, "\\'")}')">정답 확인</button>` : ''}
                 </div>`;
             qCont.appendChild(block);
         });
 
         if(examInfo.mode !== 'study') renderOMR();
         if(examInfo.mode !== 'normal-all') document.getElementById('step-count').innerText = `${currentIdx+1} / ${currentQs.length}`;
-    }
+    };
 
-    function renderOMR() {
+    window.renderOMR = () => {
         const target = document.getElementById('omr-rows-target');
+        if (!target) return;
         target.innerHTML = '';
-        currentQs.forEach((_, i) => {
+        currentQs.forEach((q, i) => {
             const n = i + 1;
+            const optionCount = q.options ? q.options.length : 4;
+            const optionArray = Array.from({ length: optionCount }, (_, idx) => idx + 1);
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td class="omr-num-cell" onclick="scrollToQ(${n})">${n}</td><td style="text-align:center;">${[1,2,3,4,5].map(v => `<div class="omr-circle ${userAnswers[n]==v?'marked':''}" onclick="mark(${n},${v})">${v}</div>`).join('')}</td><td style="text-align:center;"><div class="idx-btn ${indexMarks[n]?'checked':''}" onclick="toggleIdx(${n})"></div></td>`;
+            tr.innerHTML = `
+                <td class="omr-num-cell" onclick="handleOmrNumClick(${n})">${n}</td>
+                <td style="text-align:center;">
+                    ${optionArray.map(v => `<div class="omr-circle ${userAnswers[n] == v ? 'marked' : ''}" onclick="mark(${n}, ${v})">${v}</div>`).join('')}
+                </td>
+                <td style="text-align:center;"><div class="idx-btn ${indexMarks[n] ? 'checked' : ''}" onclick="toggleIdx(${n})"></div></td>`;
             target.appendChild(tr);
         });
-    }
+    };
 
-    window.mark = (n, v) => { userAnswers[n] = v; renderExam(); };
-    window.toggleIdx = (n) => { indexMarks[n] = !indexMarks[n]; renderExam(); };
-    window.scrollToQ = (n) => { if(examInfo.mode === 'normal-all') document.getElementById(`q-row-${n}`).scrollIntoView({ behavior: 'smooth' }); else { currentIdx = n - 1; renderExam(); } };
+    window.handleOmrNumClick = (n) => { scrollToQ(n); toggleIdx(n); };
+    window.mark = (n, v) => { 
+        userAnswers[n] = String(v); 
+        renderExam(); 
+        renderOMR(); 
+    };
+    window.toggleIdx = (n) => { indexMarks[n] = !indexMarks[n]; renderExam(); renderOMR(); };
+    window.scrollToQ = (n) => { 
+        if(examInfo.mode === 'normal-all') { document.getElementById(`q-row-${n}`).scrollIntoView({ behavior: 'smooth' }); } 
+        else { currentIdx = n - 1; renderExam(); } 
+    };
     window.moveIdx = (dir) => { const next = currentIdx + dir; if(next >= 0 && next < currentQs.length) { currentIdx = next; renderExam(); } };
 
     window.checkStudy = (n, ans, comm) => {
         if(!userAnswers[n]) return alert("답안을 선택하세요.");
-        const isR = String(userAnswers[n]) === String(ans);
-        document.getElementById(`study-res-${n}`).innerHTML = `<div style="padding:10px; margin-top:10px; background:#f0f0f0; border-radius:5px;"><b>${isR?'⭕ 정답':'❌ 오답'} (정답: ${ans})</b><br>${comm}</div>`;
+        const isR = checkIsCorrect(userAnswers[n], ans);
+        document.getElementById(`study-res-${n}`).innerHTML = `
+            <div style="padding:15px; margin-top:15px; background:#f8f9fa; border-left:4px solid ${isR? 'var(--correct)':'var(--wrong)'}; border-radius:5px;">
+                <b style="color:${isR?'var(--correct)':'var(--wrong)'}">${isR ? '⭕ 정답' : '❌ 오답'} (정답: ${toCircleNum(ans)})</b><br>
+                <div style="margin-top:5px; font-size:0.95rem; color:#555;">${comm}</div>
+            </div>`;
     };
 
     function startTimer() { timerInterval = setInterval(() => { timeLeft--; const m = Math.floor(timeLeft/60), s = timeLeft%60; document.getElementById('timer-display').innerText = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; if(timeLeft <= 0) { clearInterval(timerInterval); showResults(); } }, 1000); }
     window.confirmSubmit = () => { if(confirm("제출하시겠습니까?")) { clearInterval(timerInterval); showResults(); } };
 
     function showResults() {
-        let correct = 0;
-        let wrongIndices = []; // 문항 번호만 담을 배열
+        let correctCount = 0, earnedScore = 0, totalPossibleScore = 0, wrongIndices = [];
+        const hasScoreData = currentQs.some(q => q.score && q.score > 0);
 
         currentQs.forEach((q, i) => {
             const n = i + 1;
             const uAns = userAnswers[n];
-            if (String(uAns) === String(q.answer)) {
-                correct++;
-            } else {
-                // [수정] 전체 데이터를 저장하지 않고 번호와 내 답안만 저장
-                wrongIndices.push({
-                    n: n,           // 문항 번호
-                    user: uAns || "미표기" // 내가 쓴 답
-                });
-            }
+            const isCorrect = checkIsCorrect(uAns, q.answer);
+            if (hasScoreData) {
+                const point = parseFloat(q.score || 0);
+                totalPossibleScore += point;
+                if (isCorrect) { correctCount++; earnedScore += point; }
+            } else { if (isCorrect) correctCount++; }
+            if (!isCorrect) wrongIndices.push({ n: n, user: uAns || "미표기" });
         });
 
-        const score = Math.round((correct / currentQs.length) * 100);
-        
-        // [핵심] 저장 데이터 경량화
+        let finalScore = hasScoreData ? Math.round(earnedScore * 10) / 10 : Math.round((correctCount / currentQs.length) * 100);
+        let displayTotal = hasScoreData ? Math.round(totalPossibleScore * 10) / 10 : 100;
+
         const record = {
             date: new Date().toLocaleString(),
-            sub: examInfo.sub,      // 과목 (조회 키)
-            title: examInfo.title,  // 회차 (조회 키)
-            score: score,
-            wrongs: wrongIndices,   // 인덱스 정보만 포함
-            isRandom: examInfo.title.includes("랜덤") // 랜덤 시험 여부 체크
+            sub: examInfo.sub,
+            title: examInfo.title,
+            score: finalScore,
+            totalPossible: displayTotal,
+            wrongs: wrongIndices,
+            isRandom: examInfo.title.includes("랜덤"),
+            allQs: currentQs 
         };
 
         const history = JSON.parse(localStorage.getItem('knou_history') || '[]');
         history.unshift(record);
-        localStorage.setItem('knou_history', JSON.stringify(history.slice(0, 15))); // 최대 15개 유지
+        localStorage.setItem('knou_history', JSON.stringify(history.slice(0, 15)));
 
         document.getElementById('exam-page').classList.add('hidden');
         document.getElementById('result-page').classList.remove('hidden');
         
-        // 결과창에서는 현재 메모리에 로드된 currentQs를 그대로 사용해 즉시 렌더링
+        const summaryCont = document.getElementById('result-summary');
+        summaryCont.innerHTML = `
+            <div style="text-align:center; grid-column: 1 / span 2; margin-bottom:10px;">
+                <span style="font-size:2.5rem; color:var(--knou-blue); font-weight:bold;">${finalScore}</span> 
+                <span style="font-size:1.2rem; color:#666;"> / ${displayTotal} 점</span>
+            </div>
+            <div style="text-align:center; border-right:1px solid #eee;">
+                <div style="color:#666; font-size:0.9rem;">맞힌 문항</div>
+                <div style="font-size:1.2rem; font-weight:bold;">${correctCount} / ${currentQs.length}</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="color:#666; font-size:0.9rem;">정답률</div>
+                <div style="font-size:1.2rem; font-weight:bold;">${Math.round((correctCount/currentQs.length)*100)}%</div>
+            </div>`;
         renderReviewList('wrong-detail-list', record); 
         renderHistory();
     }
 
-    function renderReviewList(targetId, record) {
+    window.renderReviewList = (targetId, record) => {
         const target = document.getElementById(targetId);
-        let sourceQs = [];
-        if (!record.isRandom) {
-            const [year, term] = record.title.split('년 ');
-            if (quizData[record.sub] && quizData[record.sub][year] && quizData[record.sub][year][term]) {
-                sourceQs = quizData[record.sub][year][term];
-            }
-        }
+        let sourceQs = record.allQs || currentQs;
 
         if (record.wrongs.length === 0) {
             target.innerHTML = '<p style="text-align:center; padding:40px;">오답이 없습니다. 훌륭합니다!</p>';
@@ -400,51 +477,42 @@
         }
 
         target.innerHTML = record.wrongs.map(w => {
-            const originalQ = sourceQs[w.n - 1];
-            if (!originalQ) return `<div class="q-block">기출 회차 정보를 찾을 수 없습니다.</div>`;
+            const q = sourceQs[w.n - 1];
+            if (!q) return '';
+            const commonSource = sourceQs.find(item => item.isCommon && (w.n >= item.comStart && w.n <= item.comEnd));
+            const imgSrc = getSafeImageUrl(q.image_data || q.image_url || q.img || q.image);
+            const imageHtml = imgSrc ? `<div class="q-image-container"><img src="${imgSrc}" onerror="this.parentElement.style.display='none'"></div>` : '';
 
-            // 복습 시에도 공통 지문 찾기
-            const commonSource = sourceQs.find(item => 
-                item.isCommon && (w.n >= item.comStart && w.n <= item.comEnd)
-            );
-
+            // 순서 변경: 질문 -> 이미지 -> 옵션
             return `
-                <div class="q-block" style="border-left:5px solid var(--wrong); margin-bottom:25px; padding:20px;">
-                    ${commonSource ? `<div class="common-text-box" style="font-size:0.9rem; margin-bottom:15px;">${commonSource.commonText}</div>` : ''}
-                    <div style="font-weight:bold; margin-bottom:15px;">${w.n}번. ${originalQ.question}</div>
-                    <div style="margin-bottom:15px;">
-                        ${originalQ.options.map((opt, oi) => {
+                <div class="q-block" style="border-left:5px solid var(--wrong); padding:20px;">
+                    ${commonSource ? `<div class="common-text-box" style="font-size:0.9rem;">${commonSource.commonText}</div>` : ''}
+                    <div style="font-weight:bold; margin-bottom:15px;">${w.n}번. ${q.question}</div>
+                    ${imageHtml}
+                    <div>
+                        ${q.options.map((opt, oi) => {
                             const num = oi + 1;
                             const isU = String(num) === String(w.user);
-                            const isA = String(num) === String(originalQ.answer);
-                            let bg = isA ? "#f0fff4" : (isU ? "#fff5f5" : "#fff");
-                            let bc = isA ? "var(--correct)" : (isU ? "var(--wrong)" : "#ddd");
-                            return `<div style="padding:10px; margin:5px 0; border:1px solid ${bc}; background:${bg}; border-radius:6px;">
-                                ${num}) ${opt} ${isA ? '<b>[정답]</b>' : ''} ${isU && !isA ? '<b>[내 선택]</b>' : ''}
-                            </div>`;
+                            const isA = checkIsCorrect(num, q.answer);
+                            let cls = 'opt-item';
+                            if (isA) cls += ' correct-highlight';
+                            else if (isU) cls += ' wrong-highlight';
+                            return `<div class="${cls}" style="cursor:default;">${num}) ${opt} ${isA?'<b>[정답]</b>':''} ${isU && !isA?'<b>[내 선택]</b>':''}</div>`;
                         }).join('')}
                     </div>
-                    <div style="background:#f8f9fa; padding:12px; border-radius:8px; font-size:0.9rem;">
-                        <b>💡 해설:</b> ${originalQ.commentary || '해설 없음'}
-                    </div>
+                    <div style="background:#f8f9fa; padding:12px; border-radius:8px; font-size:0.9rem; margin-top:10px;"><b>💡 해설:</b> ${q.commentary || '해설 없음'}</div>
                 </div>`;
         }).join('');
-    }
+    };
 
     window.openReview = (idx) => {
         const history = JSON.parse(localStorage.getItem('knou_history') || '[]');
         const data = history[idx];
         if (!data) return;
-
         document.getElementById('setup-page').classList.add('hidden');
         document.getElementById('review-page').classList.remove('hidden');
         document.getElementById('review-title').innerText = `${data.sub} 복습`;
-        document.getElementById('review-summary').innerHTML = `
-            <span>회차: ${data.title}</span>
-            <span>점수: ${data.score}점</span>
-            <span>오답: ${data.wrongs.length}</span>
-        `;
-
+        document.getElementById('review-summary').innerHTML = `<span>회차: ${data.title}</span><span>점수: ${data.score}점</span><span>오답: ${data.wrongs.length}</span>`;
         renderReviewList('review-detail-list', data);
         document.getElementById('review-page').scrollTop = 0;
     };
@@ -459,20 +527,13 @@
         const history = JSON.parse(localStorage.getItem('knou_history') || '[]');
         if(!history.length) { cont.innerHTML = '<p style="text-align:center;">기록이 없습니다.</p>'; return; }
         cont.innerHTML = history.map((h, i) => `
-            <div class="history-card" onclick="openReview(${i})" style="cursor:pointer; padding:15px; border:1px solid #ddd; margin-bottom:10px; border-radius:10px;">
+            <div class="history-card" onclick="openReview(${i})" style="cursor:pointer;">
                 <div style="display:flex; justify-content:space-between;"><b>${h.sub}</b> <span>${h.score}점</span></div>
                 <small>${h.title} | ${h.date}</small>
             </div>`).join('');
     }
 
-    // [추가] 모든 응시 기록 삭제 함수
-    window.clearHistory = () => {
-        if (confirm("저장된 모든 응시 기록을 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.")) {
-            localStorage.removeItem('knou_history'); // 데이터 삭제
-            renderHistory(); // 화면 갱신
-            alert("모든 기록이 초기화되었습니다.");
-        }
-    };
+    window.clearHistory = () => { if (confirm("기록을 삭제하시겠습니까?")) { localStorage.removeItem('knou_history'); renderHistory(); } };
 
     init();
 </script>
