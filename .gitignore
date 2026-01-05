@@ -6,3 +6,5 @@ venv_PPC/
 .venv/
 Qbank/credentials.json
 Qbank/token.pickle
+Qbank/serviceAccountKey.json
+.env
