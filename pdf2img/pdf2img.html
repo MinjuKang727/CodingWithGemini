@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF to Image 변환기 (Serverless)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        body { font-family: 'Pretendard', sans-serif; text-align: center; padding: 20px; background-color: #f5f5f5; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #drop-area { border: 2px dashed #ccc; border-radius: 10px; padding: 40px; margin: 20px 0; cursor: pointer; }
+        #drop-area.highlight { border-color: #007bff; background-color: #e7f3ff; }
+        .result-item { margin: 20px; display: inline-block; border: 1px solid #ddd; padding: 10px; border-radius: 8px; }
+        canvas { display: none; } /* 화면에는 캔버스를 숨깁니다 */
+        img { max-width: 250px; border: 1px solid #eee; display: block; margin-bottom: 10px; }
+        .btn-download { background: #28a745; color: white; padding: 8px 15px; text-decoration: none; border-radius: 5px; font-size: 14px; }
+        .btn-download:hover { background: #218838; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>PDF ➔ IMG 변환기</h1>
+    <p>서버로 파일을 전송하지 않아 안전하고 빠릅니다.</p>
+    
+    <div id="drop-area">
+        <p>PDF 파일을 여기로 드래그하거나 클릭하여 선택하세요.</p>
+        <input type="file" id="fileElem" accept=".pdf" style="display:none" onchange="handleFiles(this.files)">
+    </div>
+
+    <div id="status"></div>
+    <div id="preview-container"></div>
+</div>
+
+<canvas id="the-canvas"></canvas>
+
+<script>
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+    const dropArea = document.getElementById('drop-area');
+    const previewContainer = document.getElementById('preview-container');
+
+    // 드래그 앤 드롭 이벤트
+    dropArea.onclick = () => document.getElementById('fileElem').click();
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    dropArea.addEventListener('drop', (e) => {
+        let dt = e.dataTransfer;
+        let files = dt.files;
+        handleFiles(files);
+    });
+
+    async function handleFiles(files) {
+        const file = files[0];
+        if (file.type !== "application/pdf") {
+            alert("PDF 파일만 업로드 가능합니다.");
+            return;
+        }
+
+        previewContainer.innerHTML = '변환 중...';
+        const fileReader = new FileReader();
+
+        fileReader.onload = async function() {
+            const typedarray = new Uint8Array(this.result);
+            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            
+            previewContainer.innerHTML = ''; // 초기화
+
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({scale: 2.0}); // 화질 조절 (2.0 = 고화질)
+                
+                const canvas = document.getElementById('the-canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                await page.render({canvasContext: context, viewport: viewport}).promise;
+
+                // 이미지를 데이터 URL로 변환
+                const imgData = canvas.toDataURL('image/png');
+                
+                // 결과 UI 생성
+                const item = document.createElement('div');
+                item.className = 'result-item';
+                item.innerHTML = `
+                    <img src="${imgData}">
+                    <a href="${imgData}" download="page_${i}.png" class="btn-download">${i}페이지 다운로드</a>
+                `;
+                previewContainer.appendChild(item);
+            }
+        };
+        fileReader.readAsArrayBuffer(file);
+    }
+</script>
+
+</body>
+</html>
