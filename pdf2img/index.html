@@ -31,7 +31,7 @@
 
 <div class="container">
     <h1>PDF ➔ IMG 변환기</h1>
-    <p>원하는 페이지만 선택해서 ZIP으로 한 번에 받으세요.</p>
+    <p>원하는 페이지만 선택해서 이미지(.png) 다운받으세요.</p>
     
     <div id="drop-area">
         <p>PDF 파일을 여기로 드래그하거나 클릭하세요.</p>
@@ -40,8 +40,8 @@
 
     <div class="controls" id="controls">
         <button class="btn btn-select-all" onclick="toggleAll(true)">전체 선택</button>
-        <button class="btn btn-select-all" onclick="toggleAll(false)">선택 해제</button>
-        <button class="btn btn-download" onclick="downloadSelected()">선택한 페이지 다운로드 (ZIP)</button>
+        <button class="btn btn-select-all" onclick="toggleAll(false)">전체 선택 해제</button>
+        <button class="btn btn-download" onclick="downloadSelected()">선택한 페이지 다운로드</button>
     </div>
 
     <div id="status"></div>
@@ -124,7 +124,6 @@
     }
 
     async function downloadSelected() {
-        const zip = new JSZip();
         const checkboxes = document.querySelectorAll('.checkbox-custom:checked');
         
         if (checkboxes.length === 0) {
@@ -132,17 +131,31 @@
             return;
         }
 
-        checkboxes.forEach(cb => {
-            const index = cb.getAttribute('data-index');
-            const data = pageDataMap[index].split(',')[1]; // Base64 데이터만 추출
-            zip.file(`${fileName}_page_${index}.png`, data, {base64: true});
-        });
+        // 1개만 선택했을 때
+        if (checkboxes.length === 1) {
+            const index = checkboxes[0].getAttribute('data-index');
+            const dataUrl = pageDataMap[index];
+            
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `${fileName}_page_${index}.png`;
+            link.click();
+        } 
+        // 2개 이상 선택했을 때 (ZIP 압축)
+        else {
+            const zip = new JSZip();
+            checkboxes.forEach(cb => {
+                const index = cb.getAttribute('data-index');
+                const data = pageDataMap[index].split(',')[1]; // Base64 데이터 추출
+                zip.file(`${fileName}_page_${index}.png`, data, {base64: true});
+            });
 
-        const content = await zip.generateAsync({type: "blob"});
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(content);
-        link.download = `${fileName}_images.zip`;
-        link.click();
+            const content = await zip.generateAsync({type: "blob"});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = `${fileName}_images.zip`;
+            link.click();
+        }
     }
 </script>
 
