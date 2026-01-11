@@ -3,33 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF to Image 변환기 (Serverless)</title>
+    <title>PDF to Image 변환기 (선택 다운로드)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body { font-family: 'Pretendard', sans-serif; text-align: center; padding: 20px; background-color: #f5f5f5; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        #drop-area { border: 2px dashed #ccc; border-radius: 10px; padding: 40px; margin: 20px 0; cursor: pointer; }
-        #drop-area.highlight { border-color: #007bff; background-color: #e7f3ff; }
-        .result-item { margin: 20px; display: inline-block; border: 1px solid #ddd; padding: 10px; border-radius: 8px; }
-        canvas { display: none; } /* 화면에는 캔버스를 숨깁니다 */
-        img { max-width: 250px; border: 1px solid #eee; display: block; margin-bottom: 10px; }
-        .btn-download { background: #28a745; color: white; padding: 8px 15px; text-decoration: none; border-radius: 5px; font-size: 14px; }
-        .btn-download:hover { background: #218838; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #drop-area { border: 2px dashed #ccc; border-radius: 10px; padding: 40px; margin: 20px 0; cursor: pointer; transition: 0.3s; }
+        #drop-area:hover { border-color: #007bff; background-color: #f0f7ff; }
+        
+        .controls { margin: 20px 0; display: none; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 5px; }
+        .btn-download { background: #007bff; color: white; }
+        .btn-select-all { background: #6c757d; color: white; }
+
+        .result-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; margin-top: 20px; }
+        .img-card { border: 2px solid #eee; padding: 10px; border-radius: 10px; position: relative; cursor: pointer; transition: 0.2s; }
+        .img-card.selected { border-color: #007bff; background-color: #e7f3ff; }
+        .img-card img { width: 100%; border-radius: 5px; margin-bottom: 10px; }
+        .page-num { font-weight: bold; }
+        .checkbox-custom { width: 20px; height: 20px; margin-top: 10px; cursor: pointer; }
+        
+        canvas { display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>PDF ➔ IMG 변환기</h1>
-    <p>서버로 파일을 전송하지 않아 안전하고 빠릅니다.</p>
+    <p>원하는 페이지만 선택해서 ZIP으로 한 번에 받으세요.</p>
     
     <div id="drop-area">
-        <p>PDF 파일을 여기로 드래그하거나 클릭하여 선택하세요.</p>
+        <p>PDF 파일을 여기로 드래그하거나 클릭하세요.</p>
         <input type="file" id="fileElem" accept=".pdf" style="display:none" onchange="handleFiles(this.files)">
     </div>
 
+    <div class="controls" id="controls">
+        <button class="btn btn-select-all" onclick="toggleAll(true)">전체 선택</button>
+        <button class="btn btn-select-all" onclick="toggleAll(false)">선택 해제</button>
+        <button class="btn btn-download" onclick="downloadSelected()">선택한 페이지 다운로드 (ZIP)</button>
+    </div>
+
     <div id="status"></div>
-    <div id="preview-container"></div>
+    <div id="preview-container" class="result-container"></div>
 </div>
 
 <canvas id="the-canvas"></canvas>
@@ -38,46 +54,34 @@
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
+    let pageDataMap = {}; // 변환된 이미지 데이터를 저장할 객체
+    let fileName = "converted_images";
+
     const dropArea = document.getElementById('drop-area');
     const previewContainer = document.getElementById('preview-container');
+    const controls = document.getElementById('controls');
 
-    // 드래그 앤 드롭 이벤트
     dropArea.onclick = () => document.getElementById('fileElem').click();
-
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, preventDefaults, false);
-    });
-
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-
-    dropArea.addEventListener('drop', (e) => {
-        let dt = e.dataTransfer;
-        let files = dt.files;
-        handleFiles(files);
-    });
 
     async function handleFiles(files) {
         const file = files[0];
-        if (file.type !== "application/pdf") {
-            alert("PDF 파일만 업로드 가능합니다.");
-            return;
-        }
+        if (!file || file.type !== "application/pdf") return;
 
-        previewContainer.innerHTML = '변환 중...';
+        fileName = file.name.replace(".pdf", "");
+        previewContainer.innerHTML = 'PDF 분석 중...';
+        pageDataMap = {}; // 초기화
+        
         const fileReader = new FileReader();
-
         fileReader.onload = async function() {
             const typedarray = new Uint8Array(this.result);
             const pdf = await pdfjsLib.getDocument(typedarray).promise;
             
-            previewContainer.innerHTML = ''; // 초기화
+            previewContainer.innerHTML = '';
+            controls.style.display = 'block';
 
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
-                const viewport = page.getViewport({scale: 2.0}); // 화질 조절 (2.0 = 고화질)
+                const viewport = page.getViewport({scale: 2.0});
                 
                 const canvas = document.getElementById('the-canvas');
                 const context = canvas.getContext('2d');
@@ -86,20 +90,59 @@
 
                 await page.render({canvasContext: context, viewport: viewport}).promise;
 
-                // 이미지를 데이터 URL로 변환
                 const imgData = canvas.toDataURL('image/png');
+                pageDataMap[i] = imgData; // 데이터 저장
                 
-                // 결과 UI 생성
-                const item = document.createElement('div');
-                item.className = 'result-item';
-                item.innerHTML = `
+                // 카드 UI 생성
+                const card = document.createElement('div');
+                card.className = 'img-card';
+                card.onclick = () => toggleSelect(card, i);
+                card.innerHTML = `
                     <img src="${imgData}">
-                    <a href="${imgData}" download="page_${i}.png" class="btn-download">${i}페이지 다운로드</a>
+                    <div class="page-num">${i} 페이지</div>
+                    <input type="checkbox" class="checkbox-custom" id="check-${i}" data-index="${i}">
                 `;
-                previewContainer.appendChild(item);
+                previewContainer.appendChild(card);
             }
         };
         fileReader.readAsArrayBuffer(file);
+    }
+
+    function toggleSelect(card, index) {
+        const cb = document.getElementById(`check-${index}`);
+        cb.checked = !cb.checked;
+        card.classList.toggle('selected', cb.checked);
+    }
+
+    function toggleAll(isSelected) {
+        const cards = document.querySelectorAll('.img-card');
+        const checkboxes = document.querySelectorAll('.checkbox-custom');
+        checkboxes.forEach((cb, i) => {
+            cb.checked = isSelected;
+            cards[i].classList.toggle('selected', isSelected);
+        });
+    }
+
+    async function downloadSelected() {
+        const zip = new JSZip();
+        const checkboxes = document.querySelectorAll('.checkbox-custom:checked');
+        
+        if (checkboxes.length === 0) {
+            alert("다운로드할 페이지를 선택해주세요.");
+            return;
+        }
+
+        checkboxes.forEach(cb => {
+            const index = cb.getAttribute('data-index');
+            const data = pageDataMap[index].split(',')[1]; // Base64 데이터만 추출
+            zip.file(`${fileName}_page_${index}.png`, data, {base64: true});
+        });
+
+        const content = await zip.generateAsync({type: "blob"});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        link.download = `${fileName}_images.zip`;
+        link.click();
     }
 </script>
 
