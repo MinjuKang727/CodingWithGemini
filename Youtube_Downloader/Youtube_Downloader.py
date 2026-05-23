@@ -1,21 +1,54 @@
+import os
+import sys
+import glob
+from pathlib import Path
+import re
+import traceback
 import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
 from pytubefix import YouTube
+from imageio_ffmpeg import get_ffmpeg_exe
 import threading
-from pathlib import Path
-import re
 
 # --- 설정 및 변수 ---
+# PyInstaller로 실행 중일 때만 ffmpeg 경로를 강제 설정
+if getattr(sys, 'frozen', False):
+    # 실행 파일 내부의 임시 경로에서 ffmpeg 실행 파일을 찾음
+    base_path = os.path.join(sys._MEIPASS, 'imageio_ffmpeg', 'binaries')
+    
+    # ffmpeg로 시작하는 모든 .exe 파일을 찾음
+    files = glob.glob(os.path.join(base_path, 'ffmpeg*.exe'))
+    if files:
+        os.environ["IMAGEIO_FFMPEG_EXE"] = files[0]
+
 DEFAULT_DOWNLOAD_PATH = Path("./Youtube_Downloads")
+
+def resource_path(relative_path):
+    try:
+        # PyInstaller로 실행 시 임시 폴더 경로를 생성합니다.
+        # sys._MEIPASS는 PyInstaller가 파일을 압축 해제하는 임시 경로입니다.
+        base_path = sys._MEIPASS
+    except Exception:
+        # PyInstaller로 실행하지 않을 때(일반 파이썬 실행)는 현재 폴더를 사용합니다.
+        base_path = os.path.abspath(".")
+    
+    # 합쳐진 최종 경로를 반환합니다.
+    return os.path.join(base_path, relative_path)
 
 # --- 유틸리티 함수 ---
 def sanitize_filename(title):
-    """파일 이름에 사용할 수 없는 문자를 제거하고 정리합니다."""
+    """파일 이름에서 Windows 허용 불가 문자를 모두 제거합니다."""
+    # 윈도우 파일명 금지 문자: \ / : * ? " < > |
+    # 정규식으로 위 문자들을 모두 '_'로 대체
     sanitized = re.sub(r'[\\/:*?"<>|]', '_', title)
-    return sanitized
+    
+    # 추가로 파일명 앞뒤의 공백이나 마침표(.) 제거 (Windows에서 오류 유발 가능)
+    sanitized = sanitized.strip('. ')
+    
+    # 파일명이 너무 길 경우(Windows 경로 제한) 대비하여 적절히 자르기
+    return sanitized[:100]
 
 # --- GUI 액션 함수 ---
-
 def toggle_resolution_state():
     """다운로드 타입에 따라 해상도 콤보박스의 활성화 상태를 변경합니다."""
     selected_type = type_var.get()
@@ -83,6 +116,7 @@ def download_process():
             
             final_filename = f"{base_filename}.mp4"
             final_filepath = save_path / final_filename
+            # print(f"DEBUG: Attempting to save to: {final_filepath}") # 콘솔에서 확인 가능
             # status_label.config(text=f"⬇️ '{base_filename}' 비디오 다운로드 시작 ({resolution})...", fg="blue")
             status_label.config(text=f"⬇️ '{base_filename}' 비디오 다운로드 시작...", fg="blue")
 
@@ -112,36 +146,53 @@ def download_process():
 
             #     # 파일명 지정하여 다운로드
             #     stream.download(output_path=save_path, filename=final_filename)
-            final_message = f"✅ 비디오(MP4) 다운로드 완료! 실제 해상도: {stream.resolution} (저장 위치: {final_filepath})"
+            final_message = f"✅ 비디오(MP4) 다운로드 완료! 실제 해상도: {stream.resolution}\n(저장 경로:{final_filepath})"
             
         elif download_type == "Audio":
-            # 오디오 다운로드 로직은 이전과 동일 (생략)
-            audio_stream = yt.streams.get_audio_only()
-            native_extension = '.' + audio_stream.mime_type.split('/')[1]
-            final_filename = f"{base_filename}{native_extension}"
+            # 1. 오디오 스트림 중 가장 품질이 좋은 것을 선택
+            audio_stream = yt.streams.filter(only_audio=True).first()
+            
+            # 2. 스트림의 기본 확장자(mp4, webm 등)를 확인하여 저장
+            # 대부분 m4a 또는 webm으로 저장됩니다.
+            ext = ".m4a" if audio_stream.mime_type == "audio/mp4" else ".webm"
+            final_filename = f"{base_filename}{ext}"
             final_filepath = save_path / final_filename
             
-            status_label.config(text=f"🎶 '{base_filename}' 오디오 다운로드 시작...", fg="blue")
+            status_label.config(text=f"🎶 '{base_filename}' 오디오 다운로드 중...", fg="blue")
             
+            # 3. 별도의 변환 없이 스트림 그대로 저장 (가장 안정적)
             audio_stream.download(output_path=save_path, filename=final_filename)
             
-            final_message = f"✅ 오디오({native_extension.upper()}) 다운로드 완료! 저장 위치: {final_filepath}"
-
-
+            final_message = f"✅ 오디오({ext.upper()}) 다운로드 완료! 저장 위치: {final_filepath}"
+        
         status_label.config(text=final_message, fg="green")
-        show_silent_info("완료", final_message) # 🔔 알림음 없이 메시지 표시
+        app.after(0, lambda: show_silent_info("완료", final_message)) # 🔔 알림음 없이 메시지 표시
 
     except Exception as e:
-        error_message = f"❌ 다운로드 오류가 발생했습니다: {e}"
-        status_label.config(text=error_message, fg="red")
-        show_silent_info("오류", error_message) # 🔔 알림음 없이 메시지 표시
+        # error_message = f"❌ 다운로드 오류가 발생했습니다: {e}"
+        # status_label.config(text=error_message, fg="red")
+        # app.after(0, lambda: show_silent_info("오류", error_message)) # 🔔 알림음 없이 메시지 표시
+        # 오류의 상세 정보를 가져옵니다.
+        error_trace = traceback.format_exc()
+        error_message = f"❌ 다운로드 오류 발생가 발생했습니다.\n\n [원인]: {str(e)}\n\n[상세 내용]:\n{error_trace}"
         
+        # 상태 레이블과 메시지 박스에 표시
+        status_label.config(text="❌ 오류 발생 (상세 내용 참조)", fg="red")
+        
+        # 메인 스레드에서 메시지 박스 띄우기
+        app.after(0, lambda: show_silent_info("상세 오류", error_message))
     finally:
         download_button.config(state=tk.NORMAL)
 
 
 # --- GUI 설정 ---
 app = tk.Tk()
+try:
+    # 'icon.ico'는 준비하신 아이콘 파일 이름으로 변경하세요
+    app.iconbitmap(resource_path("Youtube_Downloader.ico") )
+except Exception as e:
+    print(f"아이콘을 불러올 수 없습니다: {e}")
+
 app.title("유튜브 다운로더 (pytubefix)")
 app.geometry("550x450")
 app.resizable(False, False)
@@ -186,7 +237,7 @@ type_label.pack(side=tk.LEFT, padx=(0, 5))
 type_var = tk.StringVar(value="Video")
 video_radio = tk.Radiobutton(options_frame, text="비디오 (MP4, 360p)", variable=type_var, value="Video", 
                              command=toggle_resolution_state, font=("맑은 고딕", 10))
-audio_radio = tk.Radiobutton(options_frame, text="오디오 (MP3)", variable=type_var, value="Audio", 
+audio_radio = tk.Radiobutton(options_frame, text="오디오 (m4a, webm 등)", variable=type_var, value="Audio", 
                              command=toggle_resolution_state, font=("맑은 고딕", 10))
 video_radio.pack(side=tk.LEFT, padx=5)
 audio_radio.pack(side=tk.LEFT, padx=5)
@@ -208,8 +259,9 @@ download_button = tk.Button(app, text="🚀 다운로드 시작", command=start_
 download_button.pack(pady=15)
 
 # 6. 상태 표시 레이블
-status_label = tk.Label(app, text="준비됨", fg="gray", font=("맑은 고딕", 10))
-status_label.pack(pady=5)
+status_label = tk.Label(app, text="준비됨", fg="gray", font=("맑은 고딕", 10), 
+                        wraplength=500, justify="center")
+status_label.pack(pady=5, fill=tk.X)
 
 # GUI 실행
 app.mainloop()
