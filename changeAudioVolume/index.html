@@ -343,13 +343,13 @@ $(function() {
         </div>
 
         <div class="control-group">
-            <label>볼륨 조절 : <span id="volText" class="info-text"></span>
+            <label>볼륨 조절 : <span id="volText" class="info-text">x1(기본값)</span>
                 <input type="range" id="volume" min="0" max="5" step="0.1" value="1">
             </label>
         </div>
 
         <div class="control-group">
-            <label>고음/저음 필터 (EQ 모ید)
+            <label>고음/저음 필터 (EQ 모드)
                 <select id="filterType">
                     <option value="none">사용 안 함 (원본 유지)</option>
                     <option value="lowpass">저음 강조 (High-Cut)</option>
@@ -366,7 +366,7 @@ $(function() {
             </label>
         </div>
 
-        <button id="processBtn">음질 개선 적용 & 다운로드</button>
+        <button id="processBtn">다운로드</button>
     </div>
 </body>
 </html>
