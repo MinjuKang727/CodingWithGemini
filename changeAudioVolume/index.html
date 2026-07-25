@@ -2,55 +2,197 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>오디오 볼륨 조절 사이트</title>
+<title>오디오 음질 개선 및 볼륨 조절 사이트</title>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-</head>
-<body>
-<h2>오디오 볼륨 조절 후 저장</h2>
+<style>
+    :root {
+        --primary-color: #4f46e5;
+        --primary-hover: #4338ca;
+        --bg-color: #f8fafc;
+        --card-bg: #ffffff;
+        --text-color: #1e293b;
+        --border-color: #e2e8f0;
+    }
 
-<input type="file" id="audioFile" accept="audio/*"><br><br>
-<label>볼륨: <input type="range" id="volume" min="0" max="10" step="0.1" value="1"></label> <span></span><br><br>
-<button id="processBtn">볼륨 적용 & 다운로드</button>
+    body {
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        margin: 0;
+        padding: 40px 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+    }
 
+    .container {
+        background-color: var(--card-bg);
+        border-radius: 16px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+        padding: 32px;
+        width: 100%;
+        max-width: 480px;
+        box-sizing: border-box;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-top: 0;
+        margin-bottom: 24px;
+        color: #0f172a;
+        text-align: center;
+    }
+
+    .control-group {
+        margin-bottom: 20px;
+        background: #f1f5f9;
+        padding: 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        transition: all 0.2s ease;
+    }
+
+    .control-group:hover {
+        border-color: #cbd5e1;
+    }
+
+    label {
+        display: flex;
+        flex-direction: column;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #475569;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    /* 파일 업로드 스타일 커스텀 */
+    input[type="file"] {
+        font-size: 0.9rem;
+        color: #64748b;
+    }
+    input[type="file"]::file-selector-button {
+        background: #e2e8f0;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        color: #334155;
+        transition: background 0.2s;
+        margin-right: 12px;
+    }
+    input[type="file"]::file-selector-button:hover {
+        background: #cbd5e1;
+    }
+
+    /* 슬라이더 스타일 */
+    input[type="range"] {
+        width: 100%;
+        accent-color: var(--primary-color);
+        cursor: pointer;
+        margin-top: 4px;
+    }
+
+    /* 셀렉트박스 스타일 */
+    select {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        background-color: #ffffff;
+        font-size: 0.95rem;
+        color: var(--text-color);
+        outline: none;
+        cursor: pointer;
+        transition: border-color 0.2s;
+    }
+    select:focus {
+        border-color: var(--primary-color);
+    }
+
+    /* 체크박스 정렬 */
+    .checkbox-label {
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+    }
+    input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary-color);
+        cursor: pointer;
+    }
+
+    /* 텍스트 정보 */
+    .info-text {
+        font-size: 0.85rem;
+        color: #64748b;
+        font-weight: normal;
+        margin-top: 4px;
+    }
+
+    /* 실행 버튼 스타일 */
+    #processBtn {
+        width: 100%;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        padding: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.1s;
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+    }
+
+    #processBtn:hover {
+        background-color: var(--primary-hover);
+    }
+
+    #processBtn:active {
+        transform: scale(0.98);
+    }
+</style>
 <script>
-uploadFile = undefined
+let uploadFile = undefined;
+
 $(function() {
     let audioContext = new (window.AudioContext || window.webkitAudioContext)();
     let audioBuffer = null;
 
     // 파일 로드
     $("#audioFile").on("change", function(e) {
-        let file = e.target.files[0];  // 업로드한 파일 경로
-        
+        let file = e.target.files[0];  
         if (!file) return;
 
         let reader = new FileReader();
         reader.onload = function(ev) {
-            // ArrayBuffer 형태의 바이너리 데이터를 오디오 데이터로 디코딩
             audioContext.decodeAudioData(ev.target.result)
                 .then(decodedData => {
-                    audioBuffer = decodedData;  // 디코딩된 오디오 데이터 객체 저장
-                    uploadFile = file  // 파일 객체 저장
-                    alert("오디오 파일 로드 완료");
-                    $("#volume").val(1).trigger('input'); 
-                    $("#volume").parent().next("span").text(`볼륨 변경: x1(기본값)`);
+                    audioBuffer = decodedData;  
+                    uploadFile = file;  
+                    $("#volume").val(1);
+                    $("#volText").text(`x1(기본값)`);
                 })
                 .catch(err => {
+                    console.error("오디오 디코딩 실패:", err);
                     alert("오디오 디코딩 실패");
-                    $("#audioFile").val("");
-                    console.error("오디오 디코딩 실패:", err)
                 });
         };
-        reader.readAsArrayBuffer(file);  // 파일을 바이너리(ArrayBuffer)로 읽기
+        reader.readAsArrayBuffer(file);  
     });
 
-    // 볼륨 변경 후,
-    $("#volume").mouseup(function(e) {
-        let volume_val = $("#volume").val();
-        $(this).parent().next("span").text(`볼륨 변경: x${volume_val}${(volume_val === "1") ? "(기본값)" : ""}`);
-    })
+    // 볼륨 텍스트 실시간 변경
+    $("#volume").on("input", function() {
+        let val = $(this).val();
+        $("#volText").text(`x${val}${val === "1" ? " (기본값)" : ""}`);
+    });
 
-    // 볼륨 적용 후 저장
+    // 오디오 처리 및 다운로드
     $("#processBtn").on("click", function() {
         if (!audioBuffer || !uploadFile) {
             alert("먼저 오디오 파일을 선택하세요.");
@@ -58,7 +200,10 @@ $(function() {
         }
 
         let volumeValue = parseFloat($("#volume").val());
+        let filterChoice = $("#filterType").val();
+        let applyCompressor = $("#useCompressor").is(":checked");
 
+        // OfflineAudioContext 생성
         let offlineCtx = new OfflineAudioContext(
             audioBuffer.numberOfChannels,
             audioBuffer.length,
@@ -68,21 +213,60 @@ $(function() {
         let source = offlineCtx.createBufferSource();
         source.buffer = audioBuffer;
 
-        let gainNode = offlineCtx.createGain();  
-        gainNode.gain.value = volumeValue;  
+        // 노드 체인 구성 시작
+        let currentNode = source;
 
-        source.connect(gainNode).connect(offlineCtx.destination);
-        source.start(0);  
+        // 1. 필터 노드 (EQ / 잡음 제거) 적용
+        if (filterChoice !== "none") {
+            let filterNode = offlineCtx.createBiquadFilter();
+            
+            if (filterChoice === "lowpass") {
+                filterNode.type = "lowpass";
+                filterNode.frequency.value = 3000; // 3kHz 이상 고주파 잡음 차단
+            } else if (filterChoice === "highpass") {
+                filterNode.type = "highpass";
+                filterNode.frequency.value = 150;  // 150Hz 이하 웅웅거리는 저음/바람 소리 제거
+            } else if (filterChoice === "peaking") {
+                filterNode.type = "peaking";
+                filterNode.frequency.value = 2500; // 목소리 대역대
+                filterNode.gain.value = 5.0;       // 5dB 부스트
+            }
+            
+            currentNode.connect(filterNode);
+            currentNode = filterNode;
+        }
 
+        // 2. 다이내믹스 컴프레서 노드 적용 (음질 정돈 및 찢어지는 소리 방지)
+        if (applyCompressor) {
+            let compressor = offlineCtx.createDynamicsCompressor();
+            compressor.threshold.value = -24; // 압축을 시작할 임계점 (dB)
+            compressor.knee.value = 30;       // 부드러운 전환 영역
+            compressor.ratio.value = 12;      // 압축 비율
+            compressor.attack.value = 0.003;  // 반응 속도
+            compressor.release.value = 0.25;  // 해제 속도
+
+            currentNode.connect(compressor);
+            currentNode = compressor;
+        }
+
+        // 3. 볼륨 조절 (GainNode) 적용
+        let gainNode = offlineCtx.createGain();
+        gainNode.gain.value = volumeValue;
+
+        currentNode.connect(gainNode);
+        gainNode.connect(offlineCtx.destination);
+
+        source.start(0);
+
+        // 렌더링 실행
         offlineCtx.startRendering().then(renderedBuffer => {
             let wavBlob = bufferToWave(renderedBuffer);
             let url = URL.createObjectURL(wavBlob);  
 
             let a = document.createElement("a");
             a.href = url;
-            // 확장자를 제외한 파일명 뒤에 _volume_값 부착
             let originalName = uploadFile.name.substring(0, uploadFile.name.lastIndexOf('.')) || uploadFile.name;
-            a.download = `${originalName}_vol_${volumeValue}.wav`;
+            a.download = `${originalName}_volume_x${$("#volume").val()}_filter_${$("#filterType").val()}.wav`;
             document.body.appendChild(a);
             a.click();  
             document.body.removeChild(a);
@@ -93,7 +277,7 @@ $(function() {
         });
     });
 
-    // 안정적인 AudioBuffer → WAV 변환 함수 (DataView 활용)
+    // AudioBuffer → WAV 변환 함수
     function bufferToWave(abuffer) {
         let numOfChan = abuffer.numberOfChannels;
         let sampleRate = abuffer.sampleRate;
@@ -101,39 +285,34 @@ $(function() {
         
         let format = 1; // PCM
         let bitDepth = 16;
-        
         let bytesPerSample = bitDepth / 8;
         let blockAlign = numOfChan * bytesPerSample;
-        
         let dataLength = length * blockAlign;
         let bufferLength = 44 + dataLength;
         
         let buffer = new ArrayBuffer(bufferLength);
         let view = new DataView(buffer);
         
-        // 리틀 엔디언 쓰기 헬퍼 함수
         let writeString = function(offset, string) {
             for (let i = 0; i < string.length; i++) {
                 view.setUint8(offset + i, string.charCodeAt(i));
             }
         };
 
-        // WAV 헤더 작성
-        writeString(0, 'RIFF');                    // ChunkID
-        view.setUint32(4, 36 + dataLength, true);  // ChunkSize
-        writeString(8, 'WAVE');                    // Format
-        writeString(12, 'fmt ');                   // Subchunk1ID
-        view.setUint32(16, 16, true);              // Subchunk1Size (16 for PCM)
-        view.setUint16(20, format, true);          // AudioFormat (1 = PCM)
-        view.setUint16(22, numOfChan, true);       // NumChannels
-        view.setUint32(24, sampleRate, true);      // SampleRate
-        view.setUint32(28, sampleRate * blockAlign, true); // ByteRate
-        view.setUint16(32, blockAlign, true);      // BlockAlign
-        view.setUint16(34, bitDepth, true);        // BitsPerSample
-        writeString(36, 'data');                   // Subchunk2ID
-        view.setUint32(40, dataLength, true);      // Subchunk2Size
+        writeString(0, 'RIFF');                    
+        view.setUint32(4, 36 + dataLength, true);  
+        writeString(8, 'WAVE');                    
+        writeString(12, 'fmt ');                   
+        view.setUint32(16, 16, true);              
+        view.setUint16(20, format, true);          
+        view.setUint16(22, numOfChan, true);       
+        view.setUint32(24, sampleRate, true);      
+        view.setUint32(28, sampleRate * blockAlign, true); 
+        view.setUint16(32, blockAlign, true);      
+        view.setUint16(34, bitDepth, true);        
+        writeString(36, 'data');                   
+        view.setUint32(40, dataLength, true);      
 
-        // 오디오 채널 데이터 인터리브 및 1포맷 변환 쓰기
         let offset = 44;
         let channels = [];
         for (let i = 0; i < numOfChan; i++) {
@@ -143,9 +322,7 @@ $(function() {
         for (let i = 0; i < length; i++) {
             for (let ch = 0; ch < numOfChan; ch++) {
                 let sample = channels[ch][i];
-                // 클램핑 (-1.0 ~ 1.0)
                 sample = Math.max(-1, Math.min(1, sample));
-                // 16비트 Signed Integer 변환 (-32768 ~ 32767)
                 sample = (sample < 0 ? sample * 0x8000 : sample * 0x7FFF);
                 view.setInt16(offset, sample, true);
                 offset += 2;
@@ -156,5 +333,40 @@ $(function() {
     }
 });
 </script>
+</head>
+<body>
+    <div class="container">
+        <h2>오디오 음질 개선 및 볼륨 조절</h2>
+
+        <div class="control-group">
+            <input type="file" id="audioFile" accept="audio/*">
+        </div>
+
+        <div class="control-group">
+            <label>볼륨 조절 : <span id="volText" class="info-text"></span>
+                <input type="range" id="volume" min="0" max="5" step="0.1" value="1">
+            </label>
+        </div>
+
+        <div class="control-group">
+            <label>고음/저음 필터 (EQ 모ید)
+                <select id="filterType">
+                    <option value="none">사용 안 함 (원본 유지)</option>
+                    <option value="lowpass">저음 강조 (High-Cut)</option>
+                    <option value="highpass">치직 소리/잡음 제거 (Low-Cut)</option>
+                    <option value="peaking">목소리/보컬 선명하게 (Mid Boost)</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="control-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="useCompressor" checked> 
+                다이내믹스 컴프레서 적용 (소리 균일화)
+            </label>
+        </div>
+
+        <button id="processBtn">음질 개선 적용 & 다운로드</button>
+    </div>
 </body>
 </html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>오디오 볼륨 조절 사이트</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+<h2>오디오 볼륨 조절 후 저장</h2>
+
+<input type="file" id="audioFile" accept="audio/*"><br><br>
+<label>볼륨: <input type="range" id="volume" min="0" max="10" step="0.1" value="1"></label> <span></span><br><br>
+<button id="processBtn">볼륨 적용 & 다운로드</button>
+
+<script>
+uploadFile = undefined
+$(function() {
+    let audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    let audioBuffer = null;
+
+    // 파일 로드
+    $("#audioFile").on("change", function(e) {
+        let file = e.target.files[0];  // 업로드한 파일 경로
+        
+        if (!file) return;
+
+        let reader = new FileReader();
+        reader.onload = function(ev) {
+            // ArrayBuffer 형태의 바이너리 데이터를 오디오 데이터로 디코딩
+            audioContext.decodeAudioData(ev.target.result)
+                .then(decodedData => {
+                    audioBuffer = decodedData;  // 디코딩된 오디오 데이터 객체 저장
+                    uploadFile = file  // 파일 객체 저장
+                    alert("오디오 파일 로드 완료");
+                    $("#volume").val(1).trigger('input'); 
+                    $("#volume").parent().next("span").text(`볼륨 변경: x1(기본값)`);
+                })
+                .catch(err => {
+                    alert("오디오 디코딩 실패");
+                    $("#audioFile").val("");
+                    console.error("오디오 디코딩 실패:", err)
+                });
+        };
+        reader.readAsArrayBuffer(file);  // 파일을 바이너리(ArrayBuffer)로 읽기
+    });
+
+    // 볼륨 변경 후,
+    $("#volume").mouseup(function(e) {
+        let volume_val = $("#volume").val();
+        $(this).parent().next("span").text(`볼륨 변경: x${volume_val}${(volume_val === "1") ? "(기본값)" : ""}`);
+    })
+
+    // 볼륨 적용 후 저장
+    $("#processBtn").on("click", function() {
+        if (!audioBuffer || !uploadFile) {
+            alert("먼저 오디오 파일을 선택하세요.");
+            return;
+        }
+
+        let volumeValue = parseFloat($("#volume").val());
+
+        let offlineCtx = new OfflineAudioContext(
+            audioBuffer.numberOfChannels,
+            audioBuffer.length,
+            audioBuffer.sampleRate
+        );
+
+        let source = offlineCtx.createBufferSource();
+        source.buffer = audioBuffer;
+
+        let gainNode = offlineCtx.createGain();  
+        gainNode.gain.value = volumeValue;  
+
+        source.connect(gainNode).connect(offlineCtx.destination);
+        source.start(0);  
+
+        offlineCtx.startRendering().then(renderedBuffer => {
+            let wavBlob = bufferToWave(renderedBuffer);
+            let url = URL.createObjectURL(wavBlob);  
+
+            let a = document.createElement("a");
+            a.href = url;
+            // 확장자를 제외한 파일명 뒤에 _volume_값 부착
+            let originalName = uploadFile.name.substring(0, uploadFile.name.lastIndexOf('.')) || uploadFile.name;
+            a.download = `${originalName}_vol_${volumeValue}.wav`;
+            document.body.appendChild(a);
+            a.click();  
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);  
+        }).catch(err => {
+            console.error("렌더링 실패:", err);
+            alert("오디오 처리 중 오류가 발생했습니다.");
+        });
+    });
+
+    // 안정적인 AudioBuffer → WAV 변환 함수 (DataView 활용)
+    function bufferToWave(abuffer) {
+        let numOfChan = abuffer.numberOfChannels;
+        let sampleRate = abuffer.sampleRate;
+        let length = abuffer.length;
+        
+        let format = 1; // PCM
+        let bitDepth = 16;
+        
+        let bytesPerSample = bitDepth / 8;
+        let blockAlign = numOfChan * bytesPerSample;
+        
+        let dataLength = length * blockAlign;
+        let bufferLength = 44 + dataLength;
+        
+        let buffer = new ArrayBuffer(bufferLength);
+        let view = new DataView(buffer);
+        
+        // 리틀 엔디언 쓰기 헬퍼 함수
+        let writeString = function(offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        };
+
+        // WAV 헤더 작성
+        writeString(0, 'RIFF');                    // ChunkID
+        view.setUint32(4, 36 + dataLength, true);  // ChunkSize
+        writeString(8, 'WAVE');                    // Format
+        writeString(12, 'fmt ');                   // Subchunk1ID
+        view.setUint32(16, 16, true);              // Subchunk1Size (16 for PCM)
+        view.setUint16(20, format, true);          // AudioFormat (1 = PCM)
+        view.setUint16(22, numOfChan, true);       // NumChannels
+        view.setUint32(24, sampleRate, true);      // SampleRate
+        view.setUint32(28, sampleRate * blockAlign, true); // ByteRate
+        view.setUint16(32, blockAlign, true);      // BlockAlign
+        view.setUint16(34, bitDepth, true);        // BitsPerSample
+        writeString(36, 'data');                   // Subchunk2ID
+        view.setUint32(40, dataLength, true);      // Subchunk2Size
+
+        // 오디오 채널 데이터 인터리브 및 1포맷 변환 쓰기
+        let offset = 44;
+        let channels = [];
+        for (let i = 0; i < numOfChan; i++) {
+            channels.push(abuffer.getChannelData(i));
+        }
+
+        for (let i = 0; i < length; i++) {
+            for (let ch = 0; ch < numOfChan; ch++) {
+                let sample = channels[ch][i];
+                // 클램핑 (-1.0 ~ 1.0)
+                sample = Math.max(-1, Math.min(1, sample));
+                // 16비트 Signed Integer 변환 (-32768 ~ 32767)
+                sample = (sample < 0 ? sample * 0x8000 : sample * 0x7FFF);
+                view.setInt16(offset, sample, true);
+                offset += 2;
+            }
+        }
+
+        return new Blob([buffer], { type: 'audio/wav' });
+    }
+});
+</script>
+</body>
+</html>
